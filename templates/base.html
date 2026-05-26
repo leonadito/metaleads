@@ -17,7 +17,10 @@
     <div class="navbar-actions">
       <a href="{% url 'dashboard' %}" class="btn btn-ghost {% block nav_dashboard %}{% endblock %}">Dashboard</a>
       <a href="{% url 'profile' %}" class="btn btn-ghost {% block nav_profile %}{% endblock %}">Meu Perfil</a>
-      <a href="{% url 'logout' %}" class="btn btn-ghost">Sair</a>
+      <form method="post" action="{% url 'logout' %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-ghost">Sair</button>
+      </form>
     </div>
   </nav>
   {% endblock %}

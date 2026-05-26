@@ -15,6 +15,17 @@
 <div id="error-container" class="alert alert-error" style="display:none"></div>
 
 <div id="kanban-board" class="kanban-board" style="display:none"></div>
+
+<!-- Lead detail modal -->
+<div id="lead-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-lead-name"></h3>
+      <button id="modal-close" class="btn btn-ghost" aria-label="Fechar">✕</button>
+    </div>
+    <div id="modal-fields" class="modal-fields"></div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}

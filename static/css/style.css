@@ -311,8 +311,83 @@ a:hover { text-decoration: underline; }
 .lead-card.dragging { opacity: .5; cursor: grabbing; }
 
 .lead-card-name { font-weight: 600; font-size: .875rem; margin-bottom: .2rem; }
+.lead-card-name-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0 0 .2rem;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: .875rem;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+.lead-card-name-btn:hover { text-decoration: underline; }
 .lead-card-phone { color: var(--color-muted); font-size: .8rem; }
 .lead-card-date { color: var(--color-muted); font-size: .75rem; margin-top: .25rem; }
+
+/* ── Modal ─────────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(0,0,0,.25);
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+  z-index: 1;
+}
+
+.modal-header h3 { font-size: 1rem; font-weight: 600; }
+
+.modal-fields {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: .85rem;
+}
+
+.modal-field { display: flex; flex-direction: column; gap: .2rem; }
+
+.modal-field-label {
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.modal-field-value {
+  font-size: .875rem;
+  color: var(--color-text);
+  word-break: break-word;
+}
 
 /* ── Utility ───────────────────────────────────────────────────────────────── */
 .loading-state { text-align: center; color: var(--color-muted); padding: 3rem; font-size: .9rem; }

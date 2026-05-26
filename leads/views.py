@@ -243,16 +243,24 @@ def kanban_api(request, sheet_name):
     except Exception as exc:
         return Response({'error': str(exc)}, status=502)
 
+    from datetime import date as _date_cls
+    leads_indexed = list(enumerate(leads))
+    leads_indexed.sort(
+        key=lambda t: _parse_lead_date(t[1]) or _date_cls.min,
+        reverse=True,
+    )
+
     columns = {col_id: [] for col_id, _ in KANBAN_COLUMNS}
-    for i, lead in enumerate(leads):
+    for i, lead in leads_indexed:
         raw_status = _normalize_status(_pick_field(lead, ['status', 'lead_status']) or '')
         col_id = _status_to_column(raw_status)
         columns[col_id].append({
             'row_index': i + 2,  # 1-based, row 1 is header
             'name': _pick_field(lead, ['nome_completo', 'nome', 'name', 'full_name']),
             'phone': _pick_field(lead, ['número_do_whatsapp', 'whatsapp', 'telefone', 'phone', 'celular', 'tel']),
-            'date': _pick_field(lead, ['created_time', 'data', 'date', 'carimbo', 'timestamp']),
+            'date': _format_date_display(_pick_field(lead, ['created_time', 'data', 'date', 'carimbo', 'timestamp'])),
             'status': raw_status,
+            'fields': {k: v for k, v in lead.items() if v},
         })
 
     result = [
@@ -348,6 +356,42 @@ def _status_to_column(raw_status):
         'PERDIDO': 'perdido',
     }
     return mapping.get(raw_status, 'criado')
+
+
+def _format_date_display(raw: str) -> str:
+    """Convert raw date/datetime string to DD/MM/YYYY HH:MM for card display."""
+    import re
+    if not raw:
+        return ''
+    raw = raw.strip()
+
+    # Google Sheets gviz: Date(YYYY, M_0idx, D[, H, Min, S])
+    m = re.match(r'Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+))?', raw, re.IGNORECASE)
+    if m:
+        try:
+            y, mo, d = int(m.group(1)), int(m.group(2)) + 1, int(m.group(3))
+            if m.group(4) is not None:
+                return f'{d:02d}/{mo:02d}/{y} {int(m.group(4)):02d}:{int(m.group(5)):02d}'
+            return f'{d:02d}/{mo:02d}/{y}'
+        except (ValueError, TypeError):
+            pass
+
+    # ISO: 2026-05-12T02:17:50[-05:00]
+    m = re.match(r'(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})', raw)
+    if m:
+        return f'{m.group(3)}/{m.group(2)}/{m.group(1)} {m.group(4)}:{m.group(5)}'
+
+    # ISO date only: 2026-05-12
+    m = re.match(r'(\d{4})-(\d{2})-(\d{2})', raw)
+    if m:
+        return f'{m.group(3)}/{m.group(2)}/{m.group(1)}'
+
+    # Already DD/MM/YYYY HH:MM[:SS]
+    m = re.match(r'(\d{2}/\d{2}/\d{4}) (\d{2}:\d{2})', raw)
+    if m:
+        return f'{m.group(1)} {m.group(2)}'
+
+    return raw
 
 
 def _parse_lead_date(lead: dict):

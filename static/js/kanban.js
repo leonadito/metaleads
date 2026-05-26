@@ -110,11 +110,29 @@ function buildCard(lead) {
   const card = document.createElement('div');
   card.className = 'lead-card';
   card.draggable = true;
-  card.innerHTML = `
-    <div class="lead-card-name">${escHtml(lead.name || '—')}</div>
-    <div class="lead-card-phone">${escHtml(lead.phone || '')}</div>
-    <div class="lead-card-date">${escHtml(lead.date || '')}</div>
-  `;
+
+  const nameBtn = document.createElement('button');
+  nameBtn.type = 'button';
+  nameBtn.className = 'lead-card-name lead-card-name-btn';
+  nameBtn.textContent = lead.name || '—';
+  nameBtn.title = 'Ver detalhes';
+  nameBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    openLeadModal(lead);
+  });
+
+  const phoneEl = document.createElement('div');
+  phoneEl.className = 'lead-card-phone';
+  phoneEl.textContent = lead.phone || '';
+
+  const dateEl = document.createElement('div');
+  dateEl.className = 'lead-card-date';
+  dateEl.textContent = lead.date || '';
+
+  card.appendChild(nameBtn);
+  card.appendChild(phoneEl);
+  card.appendChild(dateEl);
 
   card.addEventListener('dragstart', () => {
     draggedCard = card;
@@ -128,6 +146,63 @@ function buildCard(lead) {
 
   return card;
 }
+
+// ── Modal ──────────────────────────────────────────────────────────────────
+const modal       = document.getElementById('lead-modal');
+const modalName   = document.getElementById('modal-lead-name');
+const modalFields = document.getElementById('modal-fields');
+const modalClose  = document.getElementById('modal-close');
+
+function isPhoneKey(key) {
+  const k = key.toLowerCase();
+  return ['whatsapp', 'telefone', 'phone', 'celular', 'tel', 'número'].some(w => k.includes(w));
+}
+
+function cleanPhone(value) {
+  const s = String(value).trim();
+  const sign = s.startsWith('+') ? '+' : '';
+  return sign + s.replace(/[^0-9]/g, '');
+}
+
+function openLeadModal(lead) {
+  modalName.textContent = lead.name || '—';
+  modalFields.innerHTML = '';
+
+  const fields = lead.fields || {};
+  for (const [key, value] of Object.entries(fields)) {
+    const row = document.createElement('div');
+    row.className = 'modal-field';
+    const label = escHtml(key.replace(/_/g, ' '));
+    let valueHtml;
+    if (isPhoneKey(key)) {
+      const cleaned = cleanPhone(value);
+      valueHtml = `<a href="https://wa.me/${encodeURIComponent(cleaned)}/?text=" target="_blank" rel="noopener">${escHtml(String(value))}</a>`;
+    } else {
+      valueHtml = escHtml(String(value));
+    }
+    row.innerHTML = `
+      <span class="modal-field-label">${label}</span>
+      <span class="modal-field-value">${valueHtml}</span>
+    `;
+    modalFields.appendChild(row);
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeLeadModal() {
+  modal.style.display = 'none';
+}
+
+modalClose.addEventListener('click', closeLeadModal);
+
+modal.addEventListener('click', (e) => {
+  if (e.target === modal) closeLeadModal();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeLeadModal();
+});
 
 function updateCount(colId, delta) {
   const el = document.getElementById(`count-${colId}`);
