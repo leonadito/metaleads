@@ -1,0 +1,12 @@
+.env
+secrets/
+planilhas-*.json
+*.pyc
+__pycache__/
+db.sqlite3
+staticfiles/
+.venv/
+venv/
+*.egg-info/
+dist/
+.pytest_cache/

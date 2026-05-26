@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ sheet_name }} — MetaLeads Agitare 1.0{% endblock %}
+
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 id="kanban-title">{{ sheet_name }}</h1>
+  <button id="refresh-btn" class="btn btn-secondary">↻ Atualizar</button>
+</div>
+
+<div id="loading" class="loading-state">Carregando Kanban...</div>
+<div id="error-container" class="alert alert-error" style="display:none"></div>
+
+<div id="kanban-board" class="kanban-board" style="display:none"></div>
+{% endblock %}
+
+{% block extra_js %}
+{{ sheet_name|json_script:"sheet-name-data" }}
+<script src="{% static 'js/api.js' %}"></script>
+<script src="{% static 'js/kanban.js' %}"></script>
+{% endblock %}

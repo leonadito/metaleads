@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Meu Perfil — MetaLeads Agitare 1.0{% endblock %}
+{% block nav_profile %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Meu Perfil</h1>
+</div>
+
+<div class="card" style="max-width:600px">
+  <div id="alert-container"></div>
+
+  <form id="profile-form">
+    {% csrf_token %}
+
+    <section class="form-section">
+      <h2 class="section-title">Google Sheets (Planilha Pública)</h2>
+      <div class="form-group">
+        <label for="sheet_id">ID da Planilha</label>
+        <input type="text" id="sheet_id" name="sheet_id" placeholder="">
+        <small class="form-hint">
+          Compartilhe a planilha como "Qualquer pessoa com o link pode visualizar" e cole o ID ou a URL aqui.
+        </small>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <h2 class="section-title">Abas da Planilha</h2>
+      <p class="form-hint">Selecione quais abas serão exibidas no Dashboard e Kanban.</p>
+      <div class="form-group">
+        <button type="button" id="detect-tabs-btn" class="btn btn-secondary">Detectar Abas</button>
+      </div>
+      <div id="tabs-list" class="tabs-list" style="display:none"></div>
+    </section>
+
+    <section class="form-section">
+      <h2 class="section-title">Telegram</h2>
+      <div class="form-group checkbox-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="telegram_enabled" name="telegram_enabled">
+          <span>Ativar Notificações Telegram</span>
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="telegram_chat_id">Chat ID do Telegram</label>
+        <input type="text" id="telegram_chat_id" name="telegram_chat_id" placeholder="123456789">
+        <small class="form-hint">
+          Envie <strong>/start</strong> para o bot <strong id="bot-name"></strong> e use o ID retornado.
+        </small>
+      </div>
+    </section>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Salvar</button>
+      <button type="button" id="test-sheet-btn" class="btn btn-secondary">Testar Planilha</button>
+      <button type="button" id="test-telegram-btn" class="btn btn-secondary">Testar Notificação</button>
+      <button type="button" id="sync-now-btn" class="btn btn-secondary">Verificar Leads Agora</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const BOT_NAME = "{{ bot_name|default:'' }}";
+</script>
+<script src="{% static 'js/api.js' %}"></script>
+<script src="{% static 'js/profile.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}MetaLeads Agitare 1.0{% endblock %}</title>
+  {% load static %}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  {% block nav %}
+  <nav class="navbar">
+    <div class="navbar-brand">MetaLeads Agitare 1.0</div>
+    <div class="navbar-actions">
+      <a href="{% url 'dashboard' %}" class="btn btn-ghost {% block nav_dashboard %}{% endblock %}">Dashboard</a>
+      <a href="{% url 'profile' %}" class="btn btn-ghost {% block nav_profile %}{% endblock %}">Meu Perfil</a>
+      <a href="{% url 'logout' %}" class="btn btn-ghost">Sair</a>
+    </div>
+  </nav>
+  {% endblock %}
+
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
