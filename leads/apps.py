@@ -1,4 +1,5 @@
 import logging
+import sys
 
 from django.apps import AppConfig
 
@@ -16,7 +17,9 @@ class LeadsConfig(AppConfig):
 
         # Django dev server chama ready() duas vezes (reloader + worker).
         # RUN_MAIN='true' só existe no processo worker real.
-        if os.environ.get('RUN_MAIN') != 'true':
+        # Under Django dev server, skip the reloader parent process.
+        # Under Gunicorn (production), RUN_MAIN is not set — allow scheduler to start.
+        if 'runserver' in sys.argv and os.environ.get('RUN_MAIN') != 'true':
             return
 
         from .tasks import check_new_leads
