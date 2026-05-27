@@ -28,18 +28,32 @@ def get_leads_gviz(sheet_id: str, tab_name: str | None = None) -> list[dict]:
 
 def _get_leads_sheets_api(sheet_id: str, tab_name: str | None, api_key: str) -> list[dict]:
     """Read rows via the Sheets API v4 (requires API key; sheet must allow at least link access)."""
+    import time
+
     range_notation = f"'{tab_name}'!A:ZZ" if tab_name else "A:ZZ"
     url = SHEETS_VALUES_URL.format(sheet_id=sheet_id, range=quote(range_notation, safe=''))
-    resp = requests.get(url, params={'key': api_key}, timeout=15)
 
-    if resp.status_code == 403:
-        raise ValueError(
-            "Acesso negado. Verifique se a planilha está compartilhada como "
-            "'Qualquer pessoa com o link pode visualizar' e se a API key tem permissão."
-        )
-    if resp.status_code == 404:
-        raise ValueError("Planilha ou aba não encontrada. Verifique o ID e o nome da aba.")
-    resp.raise_for_status()
+    max_retries = 4
+    for attempt in range(max_retries):
+        resp = requests.get(url, params={'key': api_key}, timeout=15)
+
+        if resp.status_code == 429:
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt  # 1s, 2s, 4s
+                logger.warning("429 Too Many Requests para aba '%s'. Aguardando %ds...", tab_name, wait)
+                time.sleep(wait)
+                continue
+            raise ValueError("Limite de requisições da API do Google atingido. Tente novamente em alguns segundos.")
+
+        if resp.status_code == 403:
+            raise ValueError(
+                "Acesso negado. Verifique se a planilha está compartilhada como "
+                "'Qualquer pessoa com o link pode visualizar' e se a API key tem permissão."
+            )
+        if resp.status_code == 404:
+            raise ValueError("Planilha ou aba não encontrada. Verifique o ID e o nome da aba.")
+        resp.raise_for_status()
+        break
 
     rows = resp.json().get('values', [])
     if not rows:

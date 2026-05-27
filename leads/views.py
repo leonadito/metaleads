@@ -194,13 +194,16 @@ def dashboard_api(request):
     except Exception as exc:
         return Response({'error': f'Erro ao buscar planilha: {exc}'}, status=502)
 
+    import time as _time
+
     selected = profile.selected_tab_names  # [] means show all
     sheets_data = []
     all_leads = []
     total = 0
-    for tab in tabs:
-        if selected and tab['name'] not in selected:
-            continue
+    active_tabs = [t for t in tabs if not selected or t['name'] in selected]
+    for idx, tab in enumerate(active_tabs):
+        if idx > 0:
+            _time.sleep(0.5)  # 500ms entre abas para evitar 429
         try:
             leads = get_leads_gviz(profile.sheet_id, _gviz_tab_name(tab))
             count = len(leads)
