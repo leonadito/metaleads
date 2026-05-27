@@ -38,17 +38,21 @@ def _send_message(chat_id: str, text: str) -> None:
 
 
 def send_new_lead_notification(chat_id: str, sheet_name: str, lead_name: str, lead_phone: str) -> None:
+    from urllib.parse import quote
+    site_url = settings.SITE_URL.rstrip('/')
+    kanban_url = f"{site_url}/kanban/{quote(sheet_name, safe='')}/"
     text = (
         "📢 Novo Lead!\n"
         f"📌 Aba: {sheet_name}\n"
         f"👤 Nome: {lead_name}\n"
-        f"📱 Telefone: {lead_phone}"
+        f"📱 Telefone: {lead_phone}\n"
+        f"🔗 Acesse: {kanban_url}"
     )
     _send_message(chat_id, text)
 
 
 def send_test_notification(chat_id: str) -> None:
-    _send_message(chat_id, "✅ LeadManager 2.0\nNotificações Telegram configuradas com sucesso!")
+    _send_message(chat_id, "✅ MetaLeads - Agitare\nNotificações Telegram configuradas com sucesso!")
 
 
 def poll_and_reply_start() -> None:
@@ -85,7 +89,7 @@ def poll_and_reply_start() -> None:
             reply = (
                 f"Olá{', ' + first_name if first_name else ''}! 👋\n\n"
                 f"Seu Chat ID é:\n{chat_id}\n\n"
-                "Cole esse número em LeadManager 2.0 → Meu Perfil → Chat ID do Telegram "
+                "Cole esse número em MetaLeads - Agitare → Meu Perfil → Chat ID do Telegram "
                 "e ative as notificações."
             )
             try:

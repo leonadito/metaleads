@@ -93,6 +93,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
 TELEGRAM_BOT_NAME = config('TELEGRAM_BOT_NAME', default='')
+SITE_URL = config('SITE_URL', default='https://metaleads.agitare.com.br')
 
 GOOGLE_API_KEY = config('GOOGLE_API_KEY', default='')
 GOOGLE_SERVICE_ACCOUNT_JSON = config('GOOGLE_SERVICE_ACCOUNT_JSON', default='')
