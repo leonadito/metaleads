@@ -29,7 +29,7 @@ def get_leads_gviz(sheet_id: str, tab_name: str | None = None) -> list[dict]:
 def _get_leads_sheets_api(sheet_id: str, tab_name: str | None, api_key: str) -> list[dict]:
     """Read rows via the Sheets API v4 (requires API key; sheet must allow at least link access)."""
     range_notation = f"'{tab_name}'!A:ZZ" if tab_name else "A:ZZ"
-    url = SHEETS_VALUES_URL.format(sheet_id=sheet_id, range=quote(range_notation))
+    url = SHEETS_VALUES_URL.format(sheet_id=sheet_id, range=quote(range_notation, safe=''))
     resp = requests.get(url, params={'key': api_key}, timeout=15)
 
     if resp.status_code == 403:
