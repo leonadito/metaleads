@@ -4,7 +4,6 @@ django-cors-headers==4.4.0
 python-decouple==3.8
 requests==2.32.3
 APScheduler==3.10.4
-pip-system-certs==5.3
 truststore==0.10.1
 google-auth==2.38.0
 google-api-python-client==2.166.0
