@@ -9,6 +9,6 @@ urlpatterns = [
     path('profile/sync-now/', views.sync_now, name='api_sync_now'),
     path('dashboard/', views.dashboard_api, name='api_dashboard'),
     path('sheets/', views.sheets_api, name='api_sheets'),
-    path('kanban/<str:sheet_name>/', views.kanban_api, name='api_kanban'),
+    path('kanban/<path:sheet_name>/', views.kanban_api, name='api_kanban'),
     path('lead/<int:row_index>/', views.lead_update, name='api_lead_update'),
 ]
