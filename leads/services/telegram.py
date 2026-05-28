@@ -1,11 +1,13 @@
 import logging
 
+import platform
+
 import requests
-import truststore
 from django.conf import settings
 
-# Use the OS (Windows) certificate store for all HTTPS requests in this process
-truststore.inject_into_ssl()
+if platform.system() == 'Windows':
+    import truststore
+    truststore.inject_into_ssl()
 
 logger = logging.getLogger(__name__)
 

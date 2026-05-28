@@ -3,10 +3,13 @@ import logging
 import re
 from urllib.parse import quote
 
-import requests
-import truststore
+import platform
 
-truststore.inject_into_ssl()
+import requests
+
+if platform.system() == 'Windows':
+    import truststore
+    truststore.inject_into_ssl()
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +37,17 @@ def _get_leads_sheets_api(sheet_id: str, tab_name: str | None, api_key: str) -> 
     url = SHEETS_VALUES_URL.format(sheet_id=sheet_id, range=quote(range_notation, safe=''))
 
     max_retries = 4
+    resp = None
     for attempt in range(max_retries):
-        resp = requests.get(url, params={'key': api_key}, timeout=15)
+        try:
+            resp = requests.get(url, params={'key': api_key}, timeout=15)
+        except (requests.exceptions.ConnectionError, requests.exceptions.SSLError) as exc:
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt
+                logger.warning("Erro de conexão para aba '%s' (tentativa %d/%d). Aguardando %ds...", tab_name, attempt + 1, max_retries, wait)
+                time.sleep(wait)
+                continue
+            raise ValueError(f"Falha de conexão com a API do Google após {max_retries} tentativas. Tente novamente.") from exc
 
         if resp.status_code == 429:
             if attempt < max_retries - 1:
