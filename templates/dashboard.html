@@ -7,7 +7,7 @@
 
 {% block content %}
 <div class="page-header">
-  <h1>Dashboard</h1>
+  <h1>Dashboard <span style="font-size:.65em;font-weight:400;color:var(--color-muted)">{{ request.user.get_full_name|default:request.user.username }}</span></h1>
   <button id="refresh-btn" class="btn btn-secondary">↻ Atualizar</button>
 </div>
 

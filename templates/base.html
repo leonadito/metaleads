@@ -17,10 +17,6 @@
     <div class="navbar-actions">
       <a href="{% url 'dashboard' %}" class="btn btn-ghost {% block nav_dashboard %}{% endblock %}">Dashboard</a>
       <a href="{% url 'profile' %}" class="btn btn-ghost {% block nav_profile %}{% endblock %}">Meu Perfil</a>
-      <div class="navbar-user">
-        <div class="navbar-user-avatar">{{ request.user.get_full_name|default:request.user.username|first|upper }}</div>
-        <span class="navbar-user-name">{{ request.user.get_full_name|default:request.user.username }}</span>
-      </div>
       <form method="post" action="{% url 'logout' %}" style="display:inline">
         {% csrf_token %}
         <button type="submit" class="btn btn-ghost">Sair</button>
