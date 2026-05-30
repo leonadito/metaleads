@@ -24,6 +24,8 @@ class SheetMetadata(models.Model):
     sheet_id = models.CharField(max_length=255)
     sheet_names = models.JSONField(default=list)  # list of {name, gid}
     last_sync = models.DateTimeField(null=True, blank=True)
+    chart_data = models.JSONField(null=True, blank=True, default=None)
+    chart_data = models.JSONField(null=True, blank=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -199,13 +199,13 @@ def dashboard_api(request):
     active_tabs = [t for t in tabs if not selected or t['name'] in selected]
 
     if not force_refresh:
-        return _dashboard_from_cache(request.user, active_tabs)
+        return _dashboard_from_cache(request.user, profile.sheet_id, active_tabs)
 
     return _dashboard_from_api(request.user, profile.sheet_id, active_tabs)
 
 
-def _dashboard_from_cache(user, active_tabs):
-    """Serve counts from SyncLog — zero Google API calls."""
+def _dashboard_from_cache(user, profile_sheet_id, active_tabs):
+    """Serve counts from SyncLog and chart from SheetMetadata — zero Google API calls."""
     logs = {log.sheet_name: log for log in SyncLog.objects.filter(user=user)}
     sheets_data = []
     total = 0
@@ -225,10 +225,13 @@ def _dashboard_from_cache(user, active_tabs):
         local_dt = timezone.localtime(latest_sync)
         synced_at_str = local_dt.strftime('%d/%m/%Y %H:%M')
 
+    meta = SheetMetadata.objects.filter(user=user, sheet_id=profile_sheet_id).first()
+    chart = meta.chart_data if meta else None
+
     return Response({
         'total': total if logs else None,
         'sheets': sheets_data,
-        'chart': None,
+        'chart': chart,
         'synced_at': synced_at_str,
     })
 
@@ -261,11 +264,14 @@ def _dashboard_from_api(user, sheet_id, active_tabs):
         except Exception as exc:
             sheets_data.append({'name': tab['name'], 'gid': tab['gid'], 'count': None, 'error': str(exc)})
 
+    chart = _build_chart_data(all_leads)
+    SheetMetadata.objects.filter(user=user, sheet_id=sheet_id).update(chart_data=chart)
+
     local_dt = timezone.localtime(timezone.now())
     return Response({
         'total': total,
         'sheets': sheets_data,
-        'chart': _build_chart_data(all_leads),
+        'chart': chart,
         'synced_at': local_dt.strftime('%d/%m/%Y %H:%M'),
     })
 

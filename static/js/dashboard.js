@@ -40,18 +40,11 @@ async function loadDashboard(forceRefresh = false) {
   }
 
   if (data.chart) {
-    try { localStorage.setItem('dashboard_chart', JSON.stringify(data.chart)); } catch(_) {}
     chartSection.style.display = 'block';
     renderChart(data.chart);
   } else {
-    const cached = (() => { try { return JSON.parse(localStorage.getItem('dashboard_chart')); } catch(_) { return null; } })();
-    if (cached) {
-      chartSection.style.display = 'block';
-      renderChart(cached);
-    } else {
-      chartSection.style.display = 'none';
-      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
-    }
+    chartSection.style.display = 'none';
+    if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
   }
 }
 
