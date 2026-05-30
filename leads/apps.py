@@ -31,12 +31,18 @@ class LeadsConfig(AppConfig):
             trigger=IntervalTrigger(minutes=5),
             id='check_new_leads',
             replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=60,
         )
         scheduler.add_job(
             poll_and_reply_start,
-            trigger=IntervalTrigger(seconds=30),
+            trigger=IntervalTrigger(seconds=60),
             id='poll_telegram',
             replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=15,
         )
         scheduler.start()
-        logger.info("APScheduler iniciado: check_new_leads a cada 1 min, poll_telegram a cada 30s")
+        logger.info("APScheduler iniciado: check_new_leads a cada 5 min, poll_telegram a cada 60s")

@@ -12,20 +12,28 @@ if platform.system() == 'Windows':
 logger = logging.getLogger(__name__)
 
 _last_update_id: int | None = None
+_session: requests.Session | None = None
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/{method}"
 
 
+def _get_session() -> requests.Session:
+    global _session
+    if _session is None:
+        _session = requests.Session()
+    return _session
+
+
 def _post(token: str, method: str, **kwargs) -> dict:
     url = TELEGRAM_API.format(token=token, method=method)
-    resp = requests.post(url, timeout=10, **kwargs)
+    resp = _get_session().post(url, timeout=10, **kwargs)
     resp.raise_for_status()
     return resp.json()
 
 
 def _get(token: str, method: str, **kwargs) -> dict:
     url = TELEGRAM_API.format(token=token, method=method)
-    resp = requests.get(url, timeout=10, **kwargs)
+    resp = _get_session().get(url, timeout=10, **kwargs)
     resp.raise_for_status()
     return resp.json()
 
