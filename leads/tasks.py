@@ -131,7 +131,7 @@ def _sync_tab(profile: UserProfile, tab: dict) -> dict:
                 send_new_lead_notification(
                     chat_id=profile.telegram_chat_id,
                     sheet_name=sheet_name,
-                    lead_name=_extract_field(lead, 'nome', 'name', 'cliente', 'lead'),
+                    lead_name=_extract_field(lead, 'full_name', 'nome', 'name', 'cliente', 'lead'),
                     lead_phone=_extract_field(lead, 'telefone', 'fone', 'celular', 'whatsapp', 'phone', 'tel', 'contato'),
                 )
                 notifications_sent += 1
