@@ -4,6 +4,8 @@ const contentEl = document.getElementById('dashboard-content');
 const totalEl = document.getElementById('total-leads');
 const sheetsGrid = document.getElementById('sheets-grid');
 const refreshBtn = document.getElementById('refresh-btn');
+const lastSyncEl = document.getElementById('last-sync');
+const chartSection = document.getElementById('chart-section');
 
 let chartInstance = null;
 
@@ -28,9 +30,22 @@ async function loadDashboard(forceRefresh = false) {
   const data = await resp.json();
   contentEl.style.display = 'block';
 
-  totalEl.textContent = data.total;
+  totalEl.textContent = data.total !== null && data.total !== undefined ? data.total : '—';
   renderSheets(data.sheets);
-  renderChart(data.chart);
+
+  if (lastSyncEl) {
+    lastSyncEl.textContent = data.synced_at
+      ? `Atualizado às ${data.synced_at}`
+      : 'Nunca sincronizado — clique em ↻ Atualizar';
+  }
+
+  if (data.chart) {
+    chartSection.style.display = 'block';
+    renderChart(data.chart);
+  } else {
+    chartSection.style.display = 'none';
+    if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+  }
 }
 
 function renderSheets(sheets) {
@@ -38,14 +53,21 @@ function renderSheets(sheets) {
   for (const sheet of sheets) {
     const card = document.createElement('div');
     card.className = 'sheet-card';
+    const countDisplay = sheet.count !== null && sheet.count !== undefined ? sheet.count : '—';
+    const errorBadge = sheet.error
+      ? `<div class="sheet-card-error" title="${escHtml(sheet.error)}">⚠ erro ao carregar</div>`
+      : '';
     card.innerHTML = `
       <div class="sheet-card-name">${escHtml(sheet.name)}</div>
-      <div class="sheet-card-count">${sheet.count}</div>
+      <div class="sheet-card-count">${countDisplay}</div>
       <div class="sheet-card-label">leads</div>
+      ${errorBadge}
     `;
-    card.addEventListener('click', () => {
-      window.location.href = `/kanban/${encodeURIComponent(sheet.name)}/`;
-    });
+    if (!sheet.error) {
+      card.addEventListener('click', () => {
+        window.location.href = `/kanban/${encodeURIComponent(sheet.name)}/`;
+      });
+    }
     sheetsGrid.appendChild(card);
   }
 }

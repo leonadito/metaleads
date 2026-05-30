@@ -19,16 +19,19 @@
   <div class="stat-card">
     <div class="stat-label">Total de Leads</div>
     <div class="stat-value" id="total-leads">—</div>
+    <div class="stat-sync" id="last-sync" style="font-size:.8rem;color:#6b7280;margin-top:.4rem"></div>
   </div>
 
   <!-- Sheet tabs -->
   <h2 class="section-title" style="margin-top:2rem">Abas da Planilha</h2>
   <div class="sheets-grid" id="sheets-grid"></div>
 
-  <!-- Chart -->
-  <h2 class="section-title" style="margin-top:2rem">Leads Recebidos nos Últimos 30 Dias</h2>
-  <div class="chart-container">
-    <canvas id="leads-chart"></canvas>
+  <!-- Chart — only rendered on refresh -->
+  <div id="chart-section" style="display:none">
+    <h2 class="section-title" style="margin-top:2rem">Leads Recebidos nos Últimos 30 Dias</h2>
+    <div class="chart-container">
+      <canvas id="leads-chart"></canvas>
+    </div>
   </div>
 </div>
 {% endblock %}

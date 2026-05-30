@@ -10,7 +10,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import UserProfile, SheetMetadata
+from .models import UserProfile, SheetMetadata, SyncLog
 from .serializers import UserProfileSerializer
 from .services.sheets import get_sheet_tabs, get_leads_gviz
 from .services.telegram import send_test_notification
@@ -186,6 +186,7 @@ def dashboard_api(request):
         return Response({'error': 'Planilha não configurada.'}, status=400)
 
     force_refresh = request.query_params.get('refresh') == '1'
+
     if force_refresh:
         SheetMetadata.objects.filter(user=request.user, sheet_id=profile.sheet_id).delete()
 
@@ -194,29 +195,79 @@ def dashboard_api(request):
     except Exception as exc:
         return Response({'error': f'Erro ao buscar planilha: {exc}'}, status=502)
 
+    selected = profile.selected_tab_names
+    active_tabs = [t for t in tabs if not selected or t['name'] in selected]
+
+    if not force_refresh:
+        return _dashboard_from_cache(request.user, active_tabs)
+
+    return _dashboard_from_api(request.user, profile.sheet_id, active_tabs)
+
+
+def _dashboard_from_cache(user, active_tabs):
+    """Serve counts from SyncLog — zero Google API calls."""
+    logs = {log.sheet_name: log for log in SyncLog.objects.filter(user=user)}
+    sheets_data = []
+    total = 0
+    latest_sync = None
+
+    for tab in active_tabs:
+        log = logs.get(tab['name'])
+        count = log.lead_count if log else None
+        if count is not None:
+            total += count
+        if log and (latest_sync is None or log.synced_at > latest_sync):
+            latest_sync = log.synced_at
+        sheets_data.append({'name': tab['name'], 'gid': tab['gid'], 'count': count})
+
+    synced_at_str = None
+    if latest_sync:
+        local_dt = timezone.localtime(latest_sync)
+        synced_at_str = local_dt.strftime('%d/%m/%Y %H:%M')
+
+    return Response({
+        'total': total if logs else None,
+        'sheets': sheets_data,
+        'chart': None,
+        'synced_at': synced_at_str,
+    })
+
+
+def _dashboard_from_api(user, sheet_id, active_tabs):
+    """Fetch fresh data from Google API, update SyncLog, return with chart."""
     import time as _time
 
-    selected = profile.selected_tab_names  # [] means show all
     sheets_data = []
     all_leads = []
     total = 0
-    active_tabs = [t for t in tabs if not selected or t['name'] in selected]
+
     for idx, tab in enumerate(active_tabs):
         if idx > 0:
-            _time.sleep(0.5)  # 500ms entre abas para evitar 429
+            _time.sleep(1.0)
         try:
-            leads = get_leads_gviz(profile.sheet_id, _gviz_tab_name(tab))
+            leads = get_leads_gviz(sheet_id, _gviz_tab_name(tab))
             count = len(leads)
+            total += count
+            all_leads.extend(leads)
+            sheets_data.append({'name': tab['name'], 'gid': tab['gid'], 'count': count})
+            log, _ = SyncLog.objects.get_or_create(
+                user=user,
+                sheet_name=tab['name'],
+                defaults={'lead_count': count, 'last_lead_row_index': count},
+            )
+            log.lead_count = count
+            log.last_lead_row_index = count
+            log.save()
         except Exception as exc:
-            return Response({'error': f'Erro ao ler aba "{tab["name"]}": {exc}'}, status=502)
-        total += count
-        all_leads.extend(leads)
-        sheets_data.append({'name': tab['name'], 'gid': tab['gid'], 'count': count})
+            sheets_data.append({'name': tab['name'], 'gid': tab['gid'], 'count': None, 'error': str(exc)})
 
-    # Leads per day for the last 30 days
-    chart = _build_chart_data(all_leads)
-
-    return Response({'total': total, 'sheets': sheets_data, 'chart': chart})
+    local_dt = timezone.localtime(timezone.now())
+    return Response({
+        'total': total,
+        'sheets': sheets_data,
+        'chart': _build_chart_data(all_leads),
+        'synced_at': local_dt.strftime('%d/%m/%Y %H:%M'),
+    })
 
 
 @api_view(['GET'])
