@@ -91,6 +91,9 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = []
 CORS_ALLOW_CREDENTIALS = True
 
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CSRF_TRUSTED_ORIGINS = config('SITE_URL', default='https://metaleads.agitare.com.br').rstrip('/').split(',')
+
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
 TELEGRAM_BOT_NAME = config('TELEGRAM_BOT_NAME', default='')
 SITE_URL = config('SITE_URL', default='https://metaleads.agitare.com.br')
