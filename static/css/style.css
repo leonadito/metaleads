@@ -389,6 +389,24 @@ a:hover { text-decoration: underline; }
   word-break: break-word;
 }
 
+.modal-status-select {
+  padding: .5rem .65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: .875rem;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.modal-status-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(22,163,74,.12);
+}
+
 /* ── Utility ───────────────────────────────────────────────────────────────── */
 .loading-state { text-align: center; color: var(--color-muted); padding: 3rem; font-size: .9rem; }
 

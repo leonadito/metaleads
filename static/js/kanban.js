@@ -10,6 +10,16 @@ const refreshBtn = document.getElementById('refresh-btn');
 let draggedCard = null;
 let draggedLead = null;
 
+// Must mirror KANBAN_COLUMNS in leads/views.py
+const KANBAN_COLUMNS = [
+  { id: 'criado', label: 'Criado' },
+  { id: 'em_analise', label: 'Em Análise' },
+  { id: 'qualificado', label: 'Qualificado' },
+  { id: 'nao_qualificado', label: 'Não Qualificado' },
+  { id: 'convertido', label: 'Convertido' },
+  { id: 'perdido', label: 'Perdido' },
+];
+
 async function loadKanban() {
   loadingEl.style.display = 'block';
   board.style.display = 'none';
@@ -82,19 +92,12 @@ function buildColumn(col) {
     updateCount(oldColId, -1);
     updateCount(newColId, +1);
 
-    // Persist to backend
-    const resp = await apiFetch(`/api/lead/${draggedLead.row_index}/`, {
-      method: 'PATCH',
-      body: JSON.stringify({ new_column_id: newColId, sheet_name: SHEET_NAME }),
-    });
-
-    if (!resp || !resp.ok) {
+    const ok = await persistStatusChange(draggedLead.row_index, newColId);
+    if (!ok) {
       // Rollback on error
       if (oldCount) oldCount.appendChild(draggedCard);
       updateCount(oldColId, +1);
       updateCount(newColId, -1);
-      const err = resp ? await resp.json() : {};
-      alert(err.error || 'Erro ao atualizar status.');
     }
 
     draggedCard = null;
@@ -104,6 +107,20 @@ function buildColumn(col) {
   colEl.appendChild(header);
   colEl.appendChild(body);
   return colEl;
+}
+
+async function persistStatusChange(rowIndex, newColId) {
+  const resp = await apiFetch(`/api/lead/${rowIndex}/`, {
+    method: 'PATCH',
+    body: JSON.stringify({ new_column_id: newColId, sheet_name: SHEET_NAME }),
+  });
+
+  if (!resp || !resp.ok) {
+    const err = resp ? await resp.json() : {};
+    alert(err.error || 'Erro ao atualizar status.');
+    return false;
+  }
+  return true;
 }
 
 function buildCard(lead) {
@@ -119,7 +136,7 @@ function buildCard(lead) {
   nameBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     e.preventDefault();
-    openLeadModal(lead);
+    openLeadModal(lead, card);
   });
 
   const phoneEl = document.createElement('div');
@@ -158,40 +175,101 @@ function isPhoneKey(key) {
   return ['whatsapp', 'telefone', 'phone', 'celular', 'tel', 'número'].some(w => k.includes(w));
 }
 
+function isStatusKey(key) {
+  return key.toLowerCase().includes('status');
+}
+
 function cleanPhone(value) {
   const s = String(value).trim();
   const sign = s.startsWith('+') ? '+' : '';
   return sign + s.replace(/[^0-9]/g, '');
 }
 
-function openLeadModal(lead) {
+let modalCard = null;
+let modalLead = null;
+
+function openLeadModal(lead, card) {
   modalName.textContent = lead.name || '—';
   modalFields.innerHTML = '';
+  modalCard = card;
+  modalLead = lead;
 
   const fields = lead.fields || {};
   for (const [key, value] of Object.entries(fields)) {
     const row = document.createElement('div');
     row.className = 'modal-field';
     const label = escHtml(key.replace(/_/g, ' '));
-    let valueHtml;
-    if (isPhoneKey(key)) {
-      const cleaned = cleanPhone(value);
-      valueHtml = `<a href="https://wa.me/${encodeURIComponent(cleaned)}/?text=" target="_blank" rel="noopener">${escHtml(String(value))}</a>`;
+
+    if (isStatusKey(key)) {
+      const labelEl = document.createElement('span');
+      labelEl.className = 'modal-field-label';
+      labelEl.innerHTML = label;
+
+      const select = document.createElement('select');
+      select.className = 'modal-status-select';
+      for (const col of KANBAN_COLUMNS) {
+        const opt = document.createElement('option');
+        opt.value = col.id;
+        opt.textContent = col.label;
+        select.appendChild(opt);
+      }
+      const currentColId = card?.closest('.kanban-column-body')?.dataset.colId;
+      select.value = currentColId || KANBAN_COLUMNS[0].id;
+
+      select.addEventListener('change', () => handleModalStatusChange(select));
+
+      row.appendChild(labelEl);
+      row.appendChild(select);
     } else {
-      valueHtml = escHtml(String(value));
+      let valueHtml;
+      if (isPhoneKey(key)) {
+        const cleaned = cleanPhone(value);
+        valueHtml = `<a href="https://wa.me/${encodeURIComponent(cleaned)}/?text=" target="_blank" rel="noopener">${escHtml(String(value))}</a>`;
+      } else {
+        valueHtml = escHtml(String(value));
+      }
+      row.innerHTML = `
+        <span class="modal-field-label">${label}</span>
+        <span class="modal-field-value">${valueHtml}</span>
+      `;
     }
-    row.innerHTML = `
-      <span class="modal-field-label">${label}</span>
-      <span class="modal-field-value">${valueHtml}</span>
-    `;
     modalFields.appendChild(row);
   }
 
   modal.style.display = 'flex';
 }
 
+async function handleModalStatusChange(select) {
+  const card = modalCard;
+  const lead = modalLead;
+  if (!card || !lead) return;
+
+  const newColId = select.value;
+  const body = card.closest('.kanban-column-body');
+  const oldColId = body?.dataset.colId;
+  if (!oldColId || newColId === oldColId) return;
+
+  select.disabled = true;
+  const ok = await persistStatusChange(lead.row_index, newColId);
+  select.disabled = false;
+
+  if (!ok) {
+    select.value = oldColId;
+    return;
+  }
+
+  const newBody = document.querySelector(`.kanban-column-body[data-col-id="${newColId}"]`);
+  if (newBody) {
+    newBody.appendChild(card);
+    updateCount(oldColId, -1);
+    updateCount(newColId, +1);
+  }
+}
+
 function closeLeadModal() {
   modal.style.display = 'none';
+  modalCard = null;
+  modalLead = null;
 }
 
 modalClose.addEventListener('click', closeLeadModal);
