@@ -21,6 +21,8 @@ def _extract_field(lead: dict, *keywords) -> str:
 
 def sync_user_now(profile: UserProfile) -> list[dict]:
     """Run one sync cycle for a single user and return per-tab diagnostics."""
+    import time
+
     results = []
     user = profile.user
     sheet_id = profile.sheet_id
@@ -44,7 +46,9 @@ def sync_user_now(profile: UserProfile) -> list[dict]:
     else:
         tabs = meta.sheet_names
 
-    for tab in tabs:
+    for i, tab in enumerate(tabs):
+        if i > 0:
+            time.sleep(1)
         try:
             result = _sync_tab(profile, tab)
         except Exception as exc:
@@ -64,12 +68,16 @@ def check_new_leads():
       3. Send Telegram notification for new leads
       4. Update SyncLog
     """
+    import time
+
     profiles = UserProfile.objects.select_related('user').filter(
         user__is_active=True,
         sheet_id__gt='',
     )
 
-    for profile in profiles:
+    for i, profile in enumerate(profiles):
+        if i > 0:
+            time.sleep(1)
         try:
             _sync_user(profile)
         except Exception:
@@ -77,6 +85,8 @@ def check_new_leads():
 
 
 def _sync_user(profile: UserProfile):
+    import time
+
     user = profile.user
     sheet_id = profile.sheet_id
 
@@ -91,7 +101,9 @@ def _sync_user(profile: UserProfile):
         meta.last_sync = timezone.now()
         meta.save()
 
-    for tab in tabs:
+    for i, tab in enumerate(tabs):
+        if i > 0:
+            time.sleep(1)
         try:
             _sync_tab(profile, tab)
         except Exception:

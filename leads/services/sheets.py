@@ -129,6 +129,8 @@ def get_sheet_tabs(sheet_id: str) -> list[dict]:
     Returns all tabs for a public Google Sheet via the Sheets API v4.
     Requires GOOGLE_API_KEY in .env. Each entry: {'name', 'gid', 'detected'}.
     """
+    import time
+
     from django.conf import settings
     api_key = getattr(settings, 'GOOGLE_API_KEY', '')
     if not api_key:
@@ -137,11 +139,25 @@ def get_sheet_tabs(sheet_id: str) -> list[dict]:
         )
 
     url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
-    resp = requests.get(
-        url,
-        params={'key': api_key, 'fields': 'sheets.properties(sheetId,title)'},
-        timeout=10,
-    )
+
+    max_retries = 4
+    resp = None
+    for attempt in range(max_retries):
+        resp = requests.get(
+            url,
+            params={'key': api_key, 'fields': 'sheets.properties(sheetId,title)'},
+            timeout=10,
+        )
+
+        if resp.status_code == 429:
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt  # 1s, 2s, 4s
+                logger.warning("429 Too Many Requests para abas de %s. Aguardando %ds...", sheet_id, wait)
+                time.sleep(wait)
+                continue
+            raise ValueError("Limite de requisições da API do Google atingido. Tente novamente em alguns segundos.")
+
+        break
 
     if resp.status_code == 403:
         raise ValueError(
