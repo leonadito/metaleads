@@ -97,12 +97,16 @@ def ingest(tenant, data, actor="sistema"):
     if source not in Source.values:
         raise IngestError(f"source inválido: {source}")
     warnings = []
-    phone = normalize_phone(data.get("phone"))
-    if data.get("phone") and not phone:
+    raw_phone = str(data.get("phone") or "").strip()
+    phone = normalize_phone(raw_phone)
+    if raw_phone and not phone:
+        # Mistyped number (e.g. incomplete): the lead still comes in, so a
+        # person can try it; it only cannot be matched to another contact.
         warnings.append("telefone inválido, guardado só nas respostas")
+        data = {**data, "form_answers": {**(data.get("form_answers") or {}), "telefone_informado": raw_phone[:40]}}
     email = (data.get("email") or "").strip().lower()
     channels = {name: str(data.get(name) or "").strip() for name in CHANNEL_FIELDS}
-    if not (phone or email or any(channels.values())):
+    if not (phone or email or any(channels.values()) or raw_phone):
         raise IngestError("é preciso ao menos telefone, e-mail ou id de canal")
     external_id = str(data.get("external_id") or "").strip()[:128]
 

@@ -110,6 +110,13 @@ class IngestTests(TestCase):
         r = ingest(self.tenant, {"source": "manual", "phone": "123", "email": "a@x.com"})
         self.assertEqual(r.contact.phone_e164, "")
         self.assertIn("telefone inválido, guardado só nas respostas", r.warnings)
+        self.assertEqual(r.lead.form_answers, {"telefone_informado": "123"})
+
+    def test_invalid_phone_alone_still_makes_a_lead_without_merging(self):
+        first = ingest(self.tenant, {"source": "manual", "name": "Ana", "phone": "(55) 5 1999-9999"})
+        second = ingest(self.tenant, {"source": "manual", "name": "Bia", "phone": "(55) 5 1999-9999"})
+        self.assertEqual(first.lead.form_answers, {"telefone_informado": "(55) 5 1999-9999"})
+        self.assertNotEqual(first.contact.pk, second.contact.pk)
 
 
 class ApiTests(TestCase):
