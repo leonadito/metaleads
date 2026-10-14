@@ -1,0 +1,46 @@
+<div id="board"
+     hx-get="{% url 'crm_kanban' %}" hx-trigger="board-changed from:body" hx-include="#filters" hx-swap="outerHTML"
+     x-data="{ dragging: null, over: null,
+               move(stage) {
+                 const lead = this.dragging; this.dragging = null; this.over = null;
+                 if (!lead || lead.stage === stage) return;
+                 htmx.ajax('POST', '/crm/leads/' + lead.uuid + '/etapa/', { swap: 'none', values: { stage: stage, from: 'kanban' } });
+               } }"
+     class="flex gap-3 overflow-x-auto pb-4">
+  {% for col in columns %}
+  <section class="flex w-72 shrink-0 flex-col rounded-lg bg-gray-100"
+           data-stage="{{ col.value }}"
+           @dragover.prevent="over = '{{ col.value }}'"
+           @dragleave.self="over = null"
+           @drop.prevent="move('{{ col.value }}')"
+           :class="over === '{{ col.value }}' && 'ring-2 ring-brand'">
+    <header class="flex items-center justify-between border-t-4 {{ col.color }} rounded-t-lg px-3 py-2">
+      <h2 class="text-sm font-semibold">{{ col.label }}</h2>
+      <span class="rounded-full bg-white px-2 text-xs text-gray-600" title="leads nesta etapa">{{ col.count }}</span>
+    </header>
+    <ol class="flex min-h-[4rem] flex-col gap-2 px-2 pb-2">
+      {% for lead in col.leads %}
+      <li draggable="true"
+          @dragstart="dragging = { uuid: '{{ lead.uuid }}', stage: '{{ col.value }}' }"
+          @dragend="dragging = null; over = null"
+          class="cursor-grab rounded-md border border-gray-200 bg-white p-3 text-sm shadow-sm hover:border-brand">
+        <a href="{% url 'crm_lead' lead.uuid %}" class="block">
+          <p class="font-medium text-gray-900">{{ lead.contact.name|default:"(sem nome)" }}</p>
+          <p class="text-gray-600">{{ lead.contact.phone_e164|default:lead.contact.email }}</p>
+          {% if lead.origin %}<p class="mt-1 truncate text-xs text-gray-500" title="{{ lead.origin }}">{{ lead.origin }}</p>{% endif %}
+          <p class="mt-2 flex items-center justify-between text-xs text-gray-500">
+            <span class="rounded bg-gray-100 px-1.5 py-0.5">{{ lead.get_source_display }}</span>
+            <time datetime="{{ lead.created_at|date:'c' }}">{{ lead.created_at|date:"d/m/Y H:i" }}</time>
+          </p>
+        </a>
+      </li>
+      {% empty %}
+      <li class="px-1 py-3 text-center text-xs text-gray-400">Nenhum lead</li>
+      {% endfor %}
+      {% if col.count > column_limit %}
+      <li class="px-1 py-2 text-center text-xs text-gray-500">Mostrando os {{ column_limit }} mais recentes. Use a busca ou o período.</li>
+      {% endif %}
+    </ol>
+  </section>
+  {% endfor %}
+</div>

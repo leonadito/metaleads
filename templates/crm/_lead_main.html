@@ -1,0 +1,95 @@
+<div id="lead-main" class="grid gap-6 lg:grid-cols-[1fr_22rem]">
+  <div class="space-y-6">
+    <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-semibold text-gray-900">{{ contact.name|default:"(sem nome)" }}</h1>
+          <p class="text-sm text-gray-500">{{ lead.get_source_display }} · entrou em {{ lead.created_at|date:"d/m/Y H:i" }}</p>
+        </div>
+        <span class="rounded-full bg-brand px-3 py-1 text-sm font-medium text-white">{{ lead.get_stage_display }}</span>
+      </div>
+      <dl class="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+        {% if contact.phone_e164 %}
+        <div><dt class="text-gray-500">Telefone</dt>
+          <dd>{{ contact.phone_e164 }} {% if whatsapp_url %}<a href="{{ whatsapp_url }}" target="_blank" rel="noopener" class="ml-1 text-emerald-700 hover:underline">WhatsApp</a>{% endif %}</dd></div>
+        {% endif %}
+        {% if contact.email %}<div><dt class="text-gray-500">E-mail</dt><dd><a href="mailto:{{ contact.email }}" class="hover:underline">{{ contact.email }}</a></dd></div>{% endif %}
+        {% if contact.city %}<div><dt class="text-gray-500">Cidade</dt><dd>{{ contact.city }}</dd></div>{% endif %}
+        {% if contact.company_name %}<div><dt class="text-gray-500">Empresa</dt><dd>{{ contact.company_name }}</dd></div>{% endif %}
+        {% if lead.landing_page_name %}
+        <div><dt class="text-gray-500">Página</dt>
+          <dd>{% if lead.landing_page_url %}<a href="{{ lead.landing_page_url }}" target="_blank" rel="noopener" class="hover:underline">{{ lead.landing_page_name }}</a>{% else %}{{ lead.landing_page_name }}{% endif %}</dd></div>
+        {% endif %}
+        {% if chatwoot_url %}<div><dt class="text-gray-500">Conversa</dt><dd><a href="{{ chatwoot_url }}" target="_blank" rel="noopener" class="text-brand hover:underline">Abrir no Chatwoot</a></dd></div>{% endif %}
+      </dl>
+    </section>
+
+    {% if answers %}
+    <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="mb-3 font-semibold">Respostas do formulário</h2>
+      <dl class="divide-y divide-gray-100 text-sm">
+        {% for label, value in answers %}
+        <div class="grid gap-1 py-2 sm:grid-cols-[14rem_1fr]"><dt class="text-gray-500">{{ label }}</dt><dd class="whitespace-pre-line">{{ value }}</dd></div>
+        {% endfor %}
+      </dl>
+    </section>
+    {% endif %}
+
+    {% if attributions %}
+    <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="mb-3 font-semibold">Origem</h2>
+      <ul class="space-y-3 text-sm">
+        {% for a in attributions %}
+        <li class="rounded-md bg-gray-50 p-3">
+          <p class="font-medium">{{ a.get_platform_display }} · {{ a.get_kind_display }}{% if a.placement %} · {{ a.placement|capfirst }}{% endif %}{% if a.is_organic %} · orgânico{% endif %}
+            <span class="font-normal text-gray-500">({{ a.occurred_at|date:"d/m/Y H:i" }})</span></p>
+          <dl class="mt-1 grid gap-x-4 sm:grid-cols-2">
+            {% if a.campaign_name or a.campaign_id %}<div><dt class="inline text-gray-500">Campanha:</dt> <dd class="inline">{{ a.campaign_name|default:a.campaign_id }}</dd></div>{% endif %}
+            {% if a.adset_name or a.adset_id %}<div><dt class="inline text-gray-500">Conjunto:</dt> <dd class="inline">{{ a.adset_name|default:a.adset_id }}</dd></div>{% endif %}
+            {% if a.ad_name or a.ad_id %}<div><dt class="inline text-gray-500">Anúncio:</dt> <dd class="inline">{{ a.ad_name|default:a.ad_id }}</dd></div>{% endif %}
+            {% if a.form_name or a.form_id %}<div><dt class="inline text-gray-500">Formulário:</dt> <dd class="inline">{{ a.form_name|default:a.form_id }}</dd></div>{% endif %}
+            {% if a.utm_source %}<div><dt class="inline text-gray-500">utm_source:</dt> <dd class="inline">{{ a.utm_source }}</dd></div>{% endif %}
+            {% if a.utm_medium %}<div><dt class="inline text-gray-500">utm_medium:</dt> <dd class="inline">{{ a.utm_medium }}</dd></div>{% endif %}
+            {% if a.utm_campaign %}<div><dt class="inline text-gray-500">utm_campaign:</dt> <dd class="inline">{{ a.utm_campaign }}</dd></div>{% endif %}
+            {% if a.creative_headline %}<div class="sm:col-span-2"><dt class="inline text-gray-500">Anúncio:</dt> <dd class="inline">{{ a.creative_headline }}</dd></div>{% endif %}
+          </dl>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside class="space-y-6">
+    <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="mb-3 font-semibold">Mudar etapa</h2>
+      <form class="space-y-3" hx-post="{% url 'crm_lead_stage' lead.uuid %}" hx-target="#lead-main" hx-swap="outerHTML">
+        <select name="stage" aria-label="Etapa">
+          {% for value, label in stages %}<option value="{{ value }}" {% if value == lead.stage %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <textarea name="reason" rows="2" placeholder="Motivo (opcional)" aria-label="Motivo"></textarea>
+        <button type="submit" class="w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark">Salvar etapa</button>
+      </form>
+    </section>
+
+    <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="mb-3 font-semibold">Histórico</h2>
+      <form class="mb-4 space-y-2" hx-post="{% url 'crm_lead_note' lead.uuid %}" hx-target="#lead-main" hx-swap="outerHTML">
+        <textarea name="text" rows="2" placeholder="Escrever uma nota" aria-label="Nota" required></textarea>
+        <button type="submit" class="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:border-brand">Adicionar nota</button>
+      </form>
+      <ol class="space-y-3 text-sm">
+        {% for item in history %}
+        <li class="flex gap-3">
+          <span class="mt-0.5 w-4 shrink-0 text-center text-gray-400" aria-hidden="true">{{ item.icon }}</span>
+          <div>
+            <p>{{ item.text }}</p>
+            {% if item.event.reason %}<p class="whitespace-pre-line text-gray-700">{{ item.event.reason }}</p>{% endif %}
+            <p class="text-xs text-gray-500">{{ item.event.created_at|date:"d/m/Y H:i" }}{% if item.event.actor %} · {{ item.event.actor }}{% endif %}</p>
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
+  </aside>
+</div>

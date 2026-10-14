@@ -1,0 +1,274 @@
+"""CRM screens (Phase 4): kanban, lead page and manual entry, on the CRM
+tables (the old kanban read a Google Sheet tab). HTMX + Tailwind + Alpine.
+
+The tenant is the client of the signed-in account (UserProfile.core_client_uuid
+= Tenant.uuid); every query filters by it. Agency staff reach their clients
+through the client selector, which signs into the client's account.
+"""
+import json
+from datetime import timedelta
+from functools import wraps
+
+from django.conf import settings
+from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError
+from django.db.models import Count, Prefetch, Q
+from django.http import Http404, HttpResponse
+from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+
+from .funnel import change_stage
+from .ingest import IngestError, ingest
+from .models import CLOSED_STAGES, EventType, Lead, LeadAttribution, LeadEvent, Source, Stage, Tenant
+
+COLUMN_LIMIT = 100
+PERIODS = [("", "Todo o período"), ("7", "Últimos 7 dias"), ("30", "Últimos 30 dias"), ("90", "Últimos 90 dias")]
+STAGE_COLORS = {
+    Stage.CRIADO: "border-sky-400",
+    Stage.EM_ANALISE: "border-amber-400",
+    Stage.QUALIFICADO: "border-emerald-500",
+    Stage.NAO_QUALIFICADO: "border-gray-400",
+    Stage.CONVERTIDO: "border-brand",
+    Stage.PERDIDO: "border-accent",
+}
+
+
+def current_tenant(request):
+    profile = getattr(request.user, "profile", None)
+    uuid = getattr(profile, "core_client_uuid", None)
+    return Tenant.objects.filter(uuid=uuid).first() if uuid else None
+
+
+def tenant_required(view):
+    @login_required
+    @wraps(view)
+    def wrapper(request, *args, **kwargs):
+        tenant = current_tenant(request)
+        if tenant is None:
+            return render(request, "crm/no_tenant.html", status=200)
+        request.tenant = tenant
+        return view(request, *args, **kwargs)
+
+    return wrapper
+
+
+def actor(request):
+    user = request.user
+    return (user.get_full_name() or user.email or user.get_username())[:200]
+
+
+def toast(response, message):
+    response["HX-Trigger"] = json.dumps({"crm-toast": message})
+    return response
+
+
+# ── Kanban ───────────────────────────────────────────────────────────────────
+
+def _filters(request):
+    return {
+        "q": request.GET.get("q", "").strip()[:100],
+        "source": request.GET.get("source", ""),
+        "period": request.GET.get("period", ""),
+    }
+
+
+def _filtered(tenant, f):
+    qs = Lead.objects.filter(tenant=tenant)
+    if f["q"]:
+        digits = "".join(ch for ch in f["q"] if ch.isdigit())
+        cond = Q(contact__name__icontains=f["q"]) | Q(contact__email__icontains=f["q"])
+        if len(digits) >= 4:
+            cond |= Q(contact__phone_e164__contains=digits)
+        qs = qs.filter(cond)
+    if f["source"] in Source.values:
+        qs = qs.filter(source=f["source"])
+    if f["period"] in ("7", "30", "90"):
+        qs = qs.filter(created_at__gte=timezone.now() - timedelta(days=int(f["period"])))
+    return qs
+
+
+def _origin(lead):
+    """Short "where from" line of a card: page, form or campaign."""
+    attributions = list(lead.attributions.all())
+    first = attributions[0] if attributions else None
+    if lead.landing_page_name:
+        return lead.landing_page_name
+    if first:
+        return first.form_name or first.campaign_name or first.ad_name or first.utm_campaign or ""
+    return ""
+
+
+def _board(request, tenant):
+    f = _filters(request)
+    qs = _filtered(tenant, f)
+    counts = dict(qs.values_list("stage").annotate(n=Count("id")).values_list("stage", "n"))
+    cards = (
+        qs.select_related("contact")
+        .prefetch_related(Prefetch("attributions", queryset=LeadAttribution.objects.order_by("occurred_at")))
+        .order_by("-created_at")
+    )
+    columns = []
+    for value, label in Stage.choices:
+        leads = list(cards.filter(stage=value)[:COLUMN_LIMIT])
+        for lead in leads:
+            lead.origin = _origin(lead)
+        columns.append({
+            "value": value, "label": label, "leads": leads, "count": counts.get(value, 0),
+            "color": STAGE_COLORS[value], "closed": value in CLOSED_STAGES,
+        })
+    return {"columns": columns, "filters": f, "column_limit": COLUMN_LIMIT}
+
+
+@tenant_required
+def kanban(request):
+    context = _board(request, request.tenant)
+    if request.headers.get("HX-Request"):
+        return render(request, "crm/_board.html", context)
+    context.update(sources=Source.choices, periods=PERIODS)
+    return render(request, "crm/kanban.html", context)
+
+
+# ── Lead page ────────────────────────────────────────────────────────────────
+
+def _lead(request, lead_uuid):
+    try:
+        return Lead.objects.select_related("contact", "tenant").get(tenant=request.tenant, uuid=lead_uuid)
+    except (Lead.DoesNotExist, ValueError):
+        raise Http404("Lead não encontrado.")
+
+
+def _label(key, labels):
+    if key in labels:
+        return labels[key]
+    text = key.replace("_", " ").strip()
+    return text[:1].upper() + text[1:]
+
+
+def _answers(lead, attributions):
+    labels = {}
+    for a in attributions:
+        labels.update((a.raw or {}).get("form_labels") or {})
+    out = []
+    for key, value in (lead.form_answers or {}).items():
+        if isinstance(value, list):
+            value = ", ".join(str(v) for v in value)
+        elif isinstance(value, bool):
+            value = "Sim" if value else "Não"
+        out.append((_label(key, labels), value))
+    return out
+
+
+def _chatwoot_url(lead):
+    base = getattr(settings, "CHATWOOT_URL", "")
+    account = lead.tenant.chatwoot_account_id
+    if base and account and lead.conversation_id:
+        return f"{base.rstrip('/')}/app/accounts/{account}/conversations/{lead.conversation_id}"
+    return ""
+
+
+def _whatsapp_url(phone):
+    return f"https://wa.me/{phone.lstrip('+')}" if phone else ""
+
+
+EVENT_ICONS = {
+    EventType.CREATED: "●", EventType.REENTRY: "↻", EventType.STAGE_CHANGED: "→",
+    EventType.MESSAGE: "✉", EventType.NOTE: "✎", EventType.EMAIL_OPENED: "◎", EventType.EMAIL_CLICKED: "◎",
+}
+
+
+def _history(lead):
+    stages = dict(Stage.choices)
+    sources = dict(Source.choices)
+    items = []
+    for e in lead.events.all().order_by("-created_at"):
+        d = e.data or {}
+        if e.type == EventType.STAGE_CHANGED:
+            text = f"{stages.get(d.get('from'), d.get('from'))} → {stages.get(d.get('to'), d.get('to'))}"
+        elif e.type in (EventType.CREATED, EventType.REENTRY):
+            text = f"{e.get_type_display()} por {sources.get(d.get('source'), d.get('source') or '')}"
+        elif e.type == EventType.MESSAGE:
+            text = "Mensagem do contato" if d.get("direction") == "incoming" else "Resposta do atendimento"
+        else:
+            text = e.get_type_display()
+        items.append({"event": e, "icon": EVENT_ICONS.get(e.type, "•"), "text": text})
+    return items
+
+
+def _detail_context(request, lead):
+    attributions = list(lead.attributions.all().order_by("-occurred_at"))
+    return {
+        "lead": lead,
+        "contact": lead.contact,
+        "answers": _answers(lead, attributions),
+        "attributions": attributions,
+        "history": _history(lead),
+        "stages": Stage.choices,
+        "chatwoot_url": _chatwoot_url(lead),
+        "whatsapp_url": _whatsapp_url(lead.contact.phone_e164),
+    }
+
+
+@tenant_required
+def lead_detail(request, lead_uuid):
+    lead = _lead(request, lead_uuid)
+    return render(request, "crm/lead_detail.html", _detail_context(request, lead))
+
+
+@tenant_required
+@require_POST
+def lead_stage(request, lead_uuid):
+    lead = _lead(request, lead_uuid)
+    stage = request.POST.get("stage", "")
+    if stage not in Stage.values:
+        return HttpResponse("Etapa inválida.", status=400)
+    message = ""
+    try:
+        if change_stage(lead, stage, actor=actor(request), reason=request.POST.get("reason", "").strip()[:1000]):
+            message = f"Movido para {Stage(stage).label}."
+    except IntegrityError:
+        message = "Este contato já tem outro lead aberto: feche-o antes de reabrir este."
+    if request.POST.get("from") == "kanban":
+        response = HttpResponse("")  # 200, not 204: the HX-Trigger must always be read
+        response["HX-Trigger"] = json.dumps({"board-changed": True, **({"crm-toast": message} if message else {})})
+        return response
+    lead.refresh_from_db()
+    response = render(request, "crm/_lead_main.html", _detail_context(request, lead))
+    return toast(response, message) if message else response
+
+
+@tenant_required
+@require_POST
+def lead_note(request, lead_uuid):
+    lead = _lead(request, lead_uuid)
+    text = request.POST.get("text", "").strip()[:5000]
+    if text:
+        LeadEvent.objects.create(lead=lead, tenant=lead.tenant, type=EventType.NOTE, actor=actor(request), reason=text)
+    return render(request, "crm/_lead_main.html", _detail_context(request, lead))
+
+
+# ── Manual entry ─────────────────────────────────────────────────────────────
+
+@tenant_required
+def lead_new(request):
+    values = {k: request.POST.get(k, "").strip() for k in ("name", "phone", "email", "city", "note")}
+    error = ""
+    if request.method == "POST":
+        try:
+            result = ingest(request.tenant, {
+                "source": Source.MANUAL,
+                "name": values["name"], "phone": values["phone"], "email": values["email"], "city": values["city"],
+            }, actor=actor(request))
+        except IngestError as exc:
+            error = "Informe ao menos telefone ou e-mail." if "ao menos" in str(exc) else str(exc)
+        else:
+            lead = result.lead
+            if values["note"]:
+                LeadEvent.objects.create(lead=lead, tenant=lead.tenant, type=EventType.NOTE,
+                                         actor=actor(request), reason=values["note"][:5000])
+            url = reverse("crm_lead", args=[lead.uuid])
+            if not result.created:
+                url += "?existente=1"
+            return redirect(url)
+    return render(request, "crm/lead_form.html", {"values": values, "error": error})

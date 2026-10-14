@@ -159,6 +159,12 @@ APSCHEDULER_RUN_NOW_TIMEOUT = 25
 CORE_API_URL = config('CORE_API_URL', default='')
 CORE_WEBHOOK_SECRET = config('CORE_WEBHOOK_SECRET', default='')
 
+# Where "/" goes: the old sheet dashboard until the cutover, the CRM kanban
+# in the beta (docker-compose.beta.yml).
+HOME_URL = config('HOME_URL', default='/dashboard/')
+# Chatwoot, for the "open conversation" link on the lead page.
+CHATWOOT_URL = config('CHATWOOT_URL', default='').rstrip('/')
+
 # Meta Lead Ads straight from the API + funnel back to Meta (crm/meta.py).
 # Agitare's Meta app (webhook signature) and its system user (Graph API).
 META_APP_SECRET = config('META_APP_SECRET', default='')

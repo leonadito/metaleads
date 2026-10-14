@@ -1,0 +1,11 @@
+{% extends "crm/base.html" %}
+{% block title %}{{ contact.name|default:"Lead" }}{% endblock %}
+{% block content %}
+<a href="{% url 'crm_kanban' %}" class="mb-4 inline-block text-sm text-gray-600 hover:underline">← Voltar ao funil</a>
+{% if request.GET.existente %}
+<div class="mb-4 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-900">
+  Este contato já tinha um lead aberto: o cadastro foi registrado como nova entrada no histórico dele.
+</div>
+{% endif %}
+{% include "crm/_lead_main.html" %}
+{% endblock %}

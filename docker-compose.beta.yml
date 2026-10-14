@@ -21,6 +21,7 @@ services:
     environment:
       SERVE_STATIC: "True"
       SCHEDULER_ENABLED: "False"
+      HOME_URL: "/crm/"
       MALLOC_ARENA_MAX: "2"
     ports:
       - "127.0.0.1:8012:8000"

@@ -8,3 +8,4 @@ staticfiles/
 .env
 docs/
 *.md
+node_modules/

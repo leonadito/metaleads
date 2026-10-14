@@ -1,0 +1,26 @@
+{% extends "crm/base.html" %}
+{% block title %}Novo lead{% endblock %}
+{% block content %}
+<a href="{% url 'crm_kanban' %}" class="mb-4 inline-block text-sm text-gray-600 hover:underline">← Voltar ao funil</a>
+<div class="max-w-xl rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+  <h1 class="mb-1 text-xl font-semibold text-brand">Novo lead</h1>
+  <p class="mb-4 text-sm text-gray-600">Se o telefone ou o e-mail já for de um contato com lead aberto, o cadastro vira uma nova entrada desse lead.</p>
+  {% if error %}<p class="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+    <div><label for="f-name" class="mb-1 block text-sm font-medium">Nome</label>
+      <input type="text" id="f-name" name="name" value="{{ values.name }}" autocomplete="off"></div>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div><label for="f-phone" class="mb-1 block text-sm font-medium">Telefone (WhatsApp)</label>
+        <input type="text" id="f-phone" name="phone" value="{{ values.phone }}" inputmode="tel" placeholder="(51) 99999-8888"></div>
+      <div><label for="f-email" class="mb-1 block text-sm font-medium">E-mail</label>
+        <input type="email" id="f-email" name="email" value="{{ values.email }}"></div>
+    </div>
+    <div><label for="f-city" class="mb-1 block text-sm font-medium">Cidade</label>
+      <input type="text" id="f-city" name="city" value="{{ values.city }}"></div>
+    <div><label for="f-note" class="mb-1 block text-sm font-medium">Nota</label>
+      <textarea id="f-note" name="note" rows="3" placeholder="Como chegou, o que procura…">{{ values.note }}</textarea></div>
+    <button type="submit" class="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark">Cadastrar lead</button>
+  </form>
+</div>
+{% endblock %}

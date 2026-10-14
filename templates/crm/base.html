@@ -1,0 +1,51 @@
+{% load static %}<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}CRM{% endblock %} · MetaLeads Agitare</title>
+  <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+  <script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-900"
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+      x-data="{ toast: '', timer: null }"
+      @crm-toast.window="toast = $event.detail.value; clearTimeout(timer); timer = setTimeout(() => toast = '', 4000)">
+  <header class="bg-brand text-white">
+    <div class="mx-auto flex max-w-screen-2xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+      <a href="{% url 'crm_kanban' %}" class="font-semibold">MetaLeads <span class="font-normal opacity-75">CRM</span></a>
+      <nav class="flex items-center gap-4 text-sm">
+        <a href="{% url 'crm_kanban' %}" class="hover:underline">Funil</a>
+        <a href="{% url 'crm_lead_new' %}" class="hover:underline">Novo lead</a>
+      </nav>
+      <div class="ml-auto flex items-center gap-3 text-sm">
+        {% if client_choices %}
+        <form method="post" action="{% url 'switch_client' %}" class="flex items-center gap-2">
+          {% csrf_token %}
+          <label for="client-switcher" class="opacity-75">Cliente</label>
+          <select id="client-switcher" name="client" onchange="this.form.submit()" class="!w-auto !py-1 text-gray-900">
+            {% for c in client_choices %}
+            <option value="{{ c.id }}" {% if c.id == current_client %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+          <noscript><button type="submit">Trocar</button></noscript>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button type="submit" class="hover:underline">Sair</button>
+        </form>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-screen-2xl px-4 py-6">
+    {% block content %}{% endblock %}
+  </main>
+
+  <div x-cloak x-show="toast" x-transition
+       class="fixed bottom-4 right-4 z-50 max-w-sm rounded-md bg-gray-900 px-4 py-3 text-sm text-white shadow-lg"
+       x-text="toast" role="status"></div>
+</body>
+</html>
