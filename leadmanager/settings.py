@@ -17,6 +17,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'leads',
+    'crm',
 ]
 
 MIDDLEWARE = [
@@ -150,3 +151,8 @@ GOOGLE_SERVICE_ACCOUNT_JSON = config('GOOGLE_SERVICE_ACCOUNT_JSON', default='')
 # APScheduler — poll leads every 5 minutes
 APSCHEDULER_DATETIME_FORMAT = "N j, Y, f:s a"
 APSCHEDULER_RUN_NOW_TIMEOUT = 25
+
+# Agitare Core: tenant copy (crm/core_sync.py). The secret is this app's
+# webhook Endpoint secret in the core; it also authenticates the full sync.
+CORE_API_URL = config('CORE_API_URL', default='')
+CORE_WEBHOOK_SECRET = config('CORE_WEBHOOK_SECRET', default='')

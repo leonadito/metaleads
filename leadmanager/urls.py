@@ -17,6 +17,8 @@ else:
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # CRM (Phase 4): intake API and core webhooks, ahead of the old api/ routes.
+    path('', include('crm.urls')),
     path('', RedirectView.as_view(url='/dashboard/', permanent=False)),
     path('login/', LoginView.as_view(), name='login'),
     path('logout/', logout_view, name='logout'),
