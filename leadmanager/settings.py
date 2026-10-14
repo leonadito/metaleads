@@ -159,6 +159,19 @@ APSCHEDULER_RUN_NOW_TIMEOUT = 25
 CORE_API_URL = config('CORE_API_URL', default='')
 CORE_WEBHOOK_SECRET = config('CORE_WEBHOOK_SECRET', default='')
 
+# Meta Lead Ads straight from the API + funnel back to Meta (crm/meta.py).
+# Agitare's Meta app (webhook signature) and its system user (Graph API).
+META_APP_SECRET = config('META_APP_SECRET', default='')
+META_VERIFY_TOKEN = config('META_VERIFY_TOKEN', default='')
+META_ACCESS_TOKEN = config('META_ACCESS_TOKEN', default='')
+META_GRAPH_VERSION = config('META_GRAPH_VERSION', default='v24.0')
+# Sending stages to Meta (Conversions API for CRM): off unless turned on, so
+# the beta never feeds a client's real funnel. Each page also has its own
+# switch (MetaPage.send_events).
+META_CAPI_ENABLED = config('META_CAPI_ENABLED', default=False, cast=bool)
+META_TEST_EVENT_CODE = config('META_TEST_EVENT_CODE', default='')
+META_LEAD_EVENT_SOURCE = config('META_LEAD_EVENT_SOURCE', default='Agitare CRM')
+
 # Task queue in the database (django-tasks + django-tasks-db), worked by
 # `manage.py db_worker`, the container's second process. No Redis.
 TASKS = {'default': {'BACKEND': 'django_tasks_db.DatabaseBackend'}}

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 import phonenumbers
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from .models import (
     AttributionKind,
@@ -114,8 +115,19 @@ def ingest(tenant, data, actor="sistema"):
                 raise
 
 
+def _occurred_at(value, now):
+    """When the entry really happened (e.g. the lead's created_time at Meta,
+    for leads read later); never in the future."""
+    if isinstance(value, str):
+        value = parse_datetime(value)
+    if value is None or timezone.is_naive(value):
+        return now
+    return min(value, now)
+
+
 def _ingest(tenant, data, actor, source, phone, email, channels, external_id, warnings):
     now = timezone.now()
+    occurred_at = _occurred_at(data.get("occurred_at"), now)
     if external_id:
         existing = Lead.objects.filter(tenant=tenant, source=source, external_id=external_id).first()
         if existing is None:
@@ -170,6 +182,9 @@ def _ingest(tenant, data, actor, source, phone, email, channels, external_id, wa
             landing_page_url=(page.get("url") or "")[:500],
             conversation_id=data.get("conversation_id") or None,
         )
+        if occurred_at < now:  # read late (polling, backfill): keep the real date
+            Lead.objects.filter(pk=lead.pk).update(created_at=occurred_at)
+            lead.created_at = occurred_at
     else:
         merged = {**lead.form_answers, **answers}
         if merged != lead.form_answers:
@@ -182,7 +197,7 @@ def _ingest(tenant, data, actor, source, phone, email, channels, external_id, wa
     LeadAttribution.objects.create(
         lead=lead,
         tenant=tenant,
-        occurred_at=now,
+        occurred_at=occurred_at,
         platform=attribution.get("platform") if attribution.get("platform") in Platform.values else Platform.DIRECT,
         kind=attribution.get("kind") if attribution.get("kind") in AttributionKind.values else AttributionKind.OTHER,
         is_organic=attribution.get("is_organic"),

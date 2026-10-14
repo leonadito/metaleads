@@ -1,7 +1,9 @@
 from django.contrib import admin
 from django.utils import timezone
 
-from .models import ApiToken, Contact, Lead, LeadAttribution, LeadEvent, Tenant
+from . import meta
+from .funnel import change_stage
+from .models import ApiToken, Contact, Lead, LeadAttribution, LeadEvent, MetaCrmEvent, MetaPage, Tenant
 
 
 @admin.register(Tenant)
@@ -50,6 +52,16 @@ class LeadAdmin(admin.ModelAdmin):
     readonly_fields = ["uuid", "created_at", "updated_at"]
     inlines = [AttributionInline, EventInline]
 
+    def save_model(self, request, obj, form, change):
+        # The stage goes through change_stage (history + Meta funnel).
+        new_stage = obj.stage
+        if change and "stage" in form.changed_data:
+            obj.stage = form.initial["stage"]
+        super().save_model(request, obj, form, change)
+        if change and "stage" in form.changed_data:
+            change_stage(obj, new_stage, actor=request.user.get_username(), reason="alterado no admin")
+            obj.refresh_from_db()
+
 
 @admin.register(ApiToken)
 class ApiTokenAdmin(admin.ModelAdmin):
@@ -65,3 +77,42 @@ class ApiTokenAdmin(admin.ModelAdmin):
     @admin.action(description="Revogar")
     def revoke(self, request, queryset):
         queryset.filter(revoked_at__isnull=True).update(revoked_at=timezone.now())
+
+
+@admin.register(MetaPage)
+class MetaPageAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "page_id", "tenant", "dataset_id", "is_active", "send_events", "subscribed_at", "polled_until"]
+    list_filter = ["is_active", "send_events"]
+    search_fields = ["name", "page_id"]
+    fields = ["tenant", "page_id", "name", "dataset_id", "is_active", "send_events",
+              "subscribed_at", "polled_until", "form_names", "last_error"]
+    readonly_fields = ["subscribed_at", "polled_until", "form_names", "last_error"]
+    actions = ["subscribe", "read_now"]
+
+    @admin.action(description="Inscrever o app no leadgen da página")
+    def subscribe(self, request, queryset):
+        for page in queryset:
+            try:
+                meta.subscribe_page(page)
+                self.message_user(request, f"{page}: inscrita.")
+            except (meta.MetaError, meta.requests.RequestException) as exc:
+                self.message_user(request, f"{page}: {exc}", level="error")
+
+    @admin.action(description="Ler os formulários agora (a primeira leitura traz 90 dias)")
+    def read_now(self, request, queryset):
+        for page in queryset:
+            meta.poll_one.enqueue(page.pk)
+        self.message_user(request, f"{queryset.count()} leitura(s) na fila.")
+
+
+@admin.register(MetaCrmEvent)
+class MetaCrmEventAdmin(admin.ModelAdmin):
+    list_display = ["event_name", "meta_lead_id", "tenant", "event_time", "status", "attempts", "sent_at"]
+    list_filter = ["status", "tenant", "event_name"]
+    search_fields = ["meta_lead_id"]
+
+    def get_readonly_fields(self, request, obj=None):
+        return [f.name for f in MetaCrmEvent._meta.fields]
+
+    def has_add_permission(self, request):
+        return False

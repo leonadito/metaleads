@@ -302,3 +302,66 @@ class CoreWebhookReceipt(models.Model):
     event_id = models.UUIDField(unique=True)
     event_type = models.CharField(max_length=50)
     received_at = models.DateTimeField(auto_now_add=True)
+
+
+class MetaPage(models.Model):
+    """A Facebook page whose Lead Ads forms feed a tenant (Meta Lead Ads
+    straight from the API; the Google Sheet is no longer the store). Access
+    goes through Agitare's Meta app and system user (token in the .env, never
+    here); this row only holds ids and the reading state."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="meta_pages")
+    page_id = models.CharField(max_length=32, unique=True)
+    name = models.CharField(max_length=255, blank=True)
+    dataset_id = models.CharField(
+        "conjunto de dados (pixel)", max_length=32, blank=True,
+        help_text="Recebe as etapas do funil (API de Conversões para CRM).",
+    )
+    is_active = models.BooleanField("ativa", default=True)
+    send_events = models.BooleanField(
+        "envia etapas à Meta", default=False,
+        help_text="Ligar só depois de desligar a integração da planilha na Meta (senão o funil recebe em dobro).",
+    )
+    form_names = models.JSONField("nomes dos formulários", default=dict, blank=True)
+    subscribed_at = models.DateTimeField("inscrita no leadgen em", null=True, blank=True)
+    polled_until = models.DateTimeField("lida até", null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "página da Meta"
+        verbose_name_plural = "páginas da Meta"
+
+    def __str__(self):
+        return self.name or self.page_id
+
+
+class MetaCrmEvent(models.Model):
+    """Outbox of funnel stages sent to Meta (Conversions API for CRM, the same
+    funnel the Google Sheet integration fed). One row per stage change per
+    Meta lead id; Meta wants the full history, not a snapshot, and refuses
+    events older than 7 days."""
+
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+    EXPIRED = "expired"
+    STATUS_CHOICES = [(PENDING, "Pendente"), (SENT, "Enviado"), (FAILED, "Recusado"), (EXPIRED, "Expirado")]
+
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="meta_events")
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="+")
+    dataset_id = models.CharField(max_length=32)
+    meta_lead_id = models.CharField(max_length=32)
+    event_name = models.CharField(max_length=50)
+    event_time = models.DateTimeField()
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING, db_index=True)
+    attempts = models.PositiveIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "etapa enviada à Meta"
+        verbose_name_plural = "etapas enviadas à Meta"
+        ordering = ["event_time", "id"]
