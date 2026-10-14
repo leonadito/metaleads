@@ -172,9 +172,10 @@ def _whatsapp_url(phone):
     return f"https://wa.me/{phone.lstrip('+')}" if phone else ""
 
 
-EVENT_ICONS = {
-    EventType.CREATED: "●", EventType.REENTRY: "↻", EventType.STAGE_CHANGED: "→",
-    EventType.MESSAGE: "✉", EventType.NOTE: "✎", EventType.EMAIL_OPENED: "◎", EventType.EMAIL_CLICKED: "◎",
+EVENT_COLORS = {
+    EventType.CREATED: "bg-sky-500", EventType.REENTRY: "bg-sky-300", EventType.STAGE_CHANGED: "bg-brand",
+    EventType.MESSAGE: "bg-emerald-400", EventType.NOTE: "bg-amber-400",
+    EventType.EMAIL_OPENED: "bg-gray-400", EventType.EMAIL_CLICKED: "bg-gray-400",
 }
 
 
@@ -192,7 +193,7 @@ def _history(lead):
             text = "Mensagem do contato" if d.get("direction") == "incoming" else "Resposta do atendimento"
         else:
             text = e.get_type_display()
-        items.append({"event": e, "icon": EVENT_ICONS.get(e.type, "•"), "text": text})
+        items.append({"event": e, "color": EVENT_COLORS.get(e.type, "bg-gray-300"), "text": text})
     return items
 
 

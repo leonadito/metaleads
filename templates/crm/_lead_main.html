@@ -81,7 +81,7 @@
       <ol class="space-y-3 text-sm">
         {% for item in history %}
         <li class="flex gap-3">
-          <span class="mt-0.5 w-4 shrink-0 text-center text-gray-400" aria-hidden="true">{{ item.icon }}</span>
+          <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full {{ item.color }}" aria-hidden="true"></span>
           <div>
             <p>{{ item.text }}</p>
             {% if item.event.reason %}<p class="whitespace-pre-line text-gray-700">{{ item.event.reason }}</p>{% endif %}
