@@ -5,6 +5,7 @@ from django.contrib.auth import views as auth_views
 from django.views.generic import RedirectView
 
 from leads.auth_views import LoginView
+from leads.tenant_switch import switch_client
 
 if settings.OIDC_ENABLED:
     from mozilla_django_oidc.views import OIDCLogoutView
@@ -19,6 +20,7 @@ urlpatterns = [
     path('', RedirectView.as_view(url='/dashboard/', permanent=False)),
     path('login/', LoginView.as_view(), name='login'),
     path('logout/', logout_view, name='logout'),
+    path('cliente/', switch_client, name='switch_client'),
     path('', include('leads.urls')),
     path('api/', include('leads.api_urls')),
 ]

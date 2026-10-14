@@ -15,6 +15,18 @@
   <nav class="navbar">
     <div class="navbar-brand">MetaLeads Agitare 1.1</div>
     <div class="navbar-actions">
+      {% if client_choices %}
+      <form method="post" action="{% url 'switch_client' %}" style="display:inline-flex;align-items:center;gap:.4rem;margin-right:.5rem">
+        {% csrf_token %}
+        <label for="client-switcher" style="font-size:.85rem;opacity:.75">Cliente:</label>
+        <select id="client-switcher" name="client" onchange="this.form.submit()" style="padding:.3rem .5rem;border-radius:.375rem;border:1px solid #d1d5db;font:inherit;font-size:.85rem">
+          {% for c in client_choices %}
+          <option value="{{ c.id }}" {% if c.id == current_client %}selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+        <noscript><button type="submit" class="btn btn-ghost">Trocar</button></noscript>
+      </form>
+      {% endif %}
       <a href="{% url 'dashboard' %}" class="btn btn-ghost {% block nav_dashboard %}{% endblock %}">Dashboard</a>
       <a href="{% url 'profile' %}" class="btn btn-ghost {% block nav_profile %}{% endblock %}">Meu Perfil</a>
       <form method="post" action="{% url 'logout' %}" style="display:inline">
