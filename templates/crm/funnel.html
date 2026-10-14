@@ -10,5 +10,16 @@
     para a IA não mudar um prompt. Só pessoas desativam subetapas, e elas nunca são apagadas, para o histórico continuar certo.
   </p>
 </div>
+<section class="mb-4 rounded-lg border p-4 text-sm shadow-sm {% if profile.ready_for_ai %}border-green-200 bg-green-50{% else %}border-amber-200 bg-amber-50{% endif %}">
+  <h2 class="font-semibold">Perfil do cliente</h2>
+  {% if not profile.version %}
+  <p>Ainda não preenchido. A IA monta o funil a partir do perfil: preencha antes de ligá-la.</p>
+  {% elif profile.ready_for_ai %}
+  <p>Versão {{ profile.version }}{% if profile.segment_label %} · {{ profile.segment_label }}{% endif %}. Pronto para a IA montar o funil.</p>
+  {% else %}
+  <p>Versão {{ profile.version }}. Para ligar a IA, falta preencher: {{ profile.missing_for_ai|join:", " }}.</p>
+  {% endif %}
+  {% if profile_url %}<a href="{{ profile_url }}" class="mt-1 inline-block font-medium text-brand hover:underline">{% if profile.version %}Editar o perfil{% else %}Preencher o perfil{% endif %} no painel da Agitare</a>{% endif %}
+</section>
 {% include "crm/_funnel.html" %}
 {% endblock %}

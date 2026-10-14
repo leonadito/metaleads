@@ -341,7 +341,10 @@ def _funnel_context(tenant, error=""):
         items = subs.get(value, [])
         active = sum(1 for s in items if s.is_active)
         stages.append((value, label, items, active, active < MAX_SUBSTAGES_PER_STAGE))
-    return {"stages": stages, "error": error, "tenant": tenant, "max_substages": MAX_SUBSTAGES_PER_STAGE}
+    profile = tenant.profile or {}
+    return {"stages": stages, "error": error, "tenant": tenant, "max_substages": MAX_SUBSTAGES_PER_STAGE,
+            "profile": profile,
+            "profile_url": f"{settings.CORE_API_URL.rstrip('/')}/clientes/{tenant.slug}/perfil/" if settings.CORE_API_URL else ""}
 
 
 def _funnel_section(request, error=""):

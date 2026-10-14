@@ -75,10 +75,36 @@ def core_webhook(request):
     try:
         with transaction.atomic():
             CoreWebhookReceipt.objects.create(event_id=event_id, event_type=event_type)
-            apply_tenant(envelope["data"]["tenant"])
+            if event_type == "tenant.profile_updated":
+                apply_profile(envelope["data"]["profile"])
+            else:
+                apply_tenant(envelope["data"]["tenant"])
     except IntegrityError:
         pass  # already applied
+    except KeyError:
+        return HttpResponseBadRequest("evento malformado")
     return HttpResponse(status=200)
+
+
+def apply_profile(payload):
+    """Keeps the newest version of the client's profile. A tenant this copy
+    does not know yet is skipped (the daily sync brings both)."""
+    version = int(payload.get("version") or 0)
+    return Tenant.objects.filter(uuid=payload["tenant"], profile_version__lt=version).update(
+        profile=payload, profile_version=version
+    )
+
+
+def fetch_profile(tenant):
+    response = requests.get(
+        f"{settings.CORE_API_URL.rstrip('/')}/api/v1/tenants/{tenant.uuid}/perfil",
+        headers={"Authorization": f"Bearer {settings.CORE_WEBHOOK_SECRET}"},
+        timeout=15,
+    )
+    if response.status_code == 404:
+        return None
+    response.raise_for_status()
+    return response.json()["profile"]
 
 
 def fetch_core_tenants():
@@ -93,9 +119,13 @@ def fetch_core_tenants():
 
 
 def full_sync():
-    """Returns how many tenants were upserted."""
+    """Returns how many tenants were upserted. Profiles come along (one read
+    per tenant; a lost tenant.profile_updated is corrected here)."""
     count = 0
     for payload in fetch_core_tenants():
-        apply_tenant(payload)
+        tenant = apply_tenant(payload)
         count += 1
+        profile = fetch_profile(tenant)
+        if profile:
+            apply_profile(profile)
     return count

@@ -36,6 +36,10 @@ class Tenant(models.Model):
     chatwoot_bot_token = models.CharField(max_length=128, blank=True)
     chatwoot_admin_id = models.PositiveIntegerField(null=True, blank=True)
     chatwoot_admin_name = models.CharField(max_length=200, blank=True)
+    # Copy of the client's profile, kept in the core (tenant.profile_updated,
+    # daily check): the base for the LLM to build the funnel (Phase 7).
+    profile = models.JSONField("perfil do cliente", default=dict, blank=True)
+    profile_version = models.PositiveIntegerField(default=0)
     waiting_alert_minutes = models.PositiveIntegerField(
         "tempo de aviso (min)", default=15,
         help_text="Mensagem do lead sem resposta de atendente por mais que isso gera aviso no Chatwoot.",

@@ -198,16 +198,46 @@ class CoreSyncTests(TestCase):
         self.send(self.event("tenant.updated", tid, updated_at="2026-10-14T09:00:00+00:00"))  # older, late
         self.assertEqual(Tenant.objects.get(uuid=tid).status, "inactive")
 
-    def test_full_sync_pulls_every_tenant(self):
+    def test_full_sync_pulls_every_tenant_and_its_profile(self):
         from .core_sync import full_sync
 
         tenants = [self.event("tenant.updated", str(uuid.uuid4()))["data"]["tenant"] for _ in range(3)]
-        response = mock.Mock(status_code=200, json=lambda: {"tenants": tenants})
-        response.raise_for_status = lambda: None
-        with mock.patch("crm.core_sync.requests.get", return_value=response) as get:
+        with_profile = tenants[0]["id"]
+
+        def get(url, headers=None, timeout=None):
+            if url.endswith("/api/v1/tenants"):
+                body, status = {"tenants": tenants}, 200
+            elif with_profile in url:
+                body, status = {"profile": self.profile(with_profile, 2)}, 200
+            else:
+                body, status = {"error": "cliente sem perfil"}, 404
+            response = mock.Mock(status_code=status, json=lambda: body)
+            response.raise_for_status = lambda: None
+            return response
+
+        with mock.patch("crm.core_sync.requests.get", side_effect=get) as mocked:
             self.assertEqual(full_sync(), 3)
-        self.assertEqual(get.call_args.kwargs["headers"], {"Authorization": "Bearer s3cret"})
+        self.assertEqual(mocked.call_args.kwargs["headers"], {"Authorization": "Bearer s3cret"})
         self.assertEqual(Tenant.objects.count(), 3)
+        self.assertEqual(Tenant.objects.get(uuid=with_profile).profile_version, 2)
+        self.assertEqual(Tenant.objects.filter(profile_version=0).count(), 2)
+
+    def profile(self, tenant_id, version, ready=True):
+        return {"tenant": tenant_id, "version": version, "ready_for_ai": ready, "missing_for_ai": [],
+                "segment": "imobiliaria", "segment_label": "Imobiliária", "what_we_do": f"versão {version}"}
+
+    def test_profile_event_keeps_the_newest_version(self):
+        tid = str(uuid.uuid4())
+        self.send(self.event("tenant.created", tid))
+        envelope = lambda v: {"id": str(uuid.uuid4()), "type": "tenant.profile_updated", "data": {"profile": self.profile(tid, v)}}
+        self.assertEqual(self.send(envelope(2)).status_code, 200)
+        self.send(envelope(1))  # older, late
+        tenant = Tenant.objects.get(uuid=tid)
+        self.assertEqual((tenant.profile_version, tenant.profile["what_we_do"]), (2, "versão 2"))
+        unknown = {"id": str(uuid.uuid4()), "type": "tenant.profile_updated", "data": {"profile": self.profile(str(uuid.uuid4()), 1)}}
+        self.assertEqual(self.send(unknown).status_code, 200)  # tenant not copied yet: skipped
+        bad = {"id": str(uuid.uuid4()), "type": "tenant.profile_updated", "data": {}}
+        self.assertEqual(self.send(bad).status_code, 400)
 
 
 class ServiceTokenTests(TestCase):

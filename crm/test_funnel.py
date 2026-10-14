@@ -222,3 +222,22 @@ class FunnelScreenLimitsTests(TestCase):
         sub.refresh_from_db()
         self.assertEqual((sub.prompt, sub.prompt_by, sub.prompt_locked), ("meu", "human", True))
         self.assertContains(self.client.get("/crm/funil/"), "prompt bloqueado para a IA")
+
+
+@override_settings(AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"], CORE_API_URL="https://id.example")
+class FunnelProfileNoticeTests(TestCase):
+    def setUp(self):
+        self.tenant = make_tenant()
+        user = User.objects.create_user(username="dona")
+        UserProfile.objects.create(user=user, core_client_uuid=self.tenant.uuid)
+        self.client.force_login(user)
+
+    def test_profile_status_on_the_funnel_page(self):
+        page = self.client.get("/crm/funil/")
+        self.assertContains(page, "Ainda não preenchido")
+        self.assertContains(page, "https://id.example/clientes/pousada/perfil/")
+        Tenant.objects.filter(pk=self.tenant.pk).update(profile_version=3, profile={
+            "version": 3, "ready_for_ai": False, "missing_for_ai": ["o que qualifica um lead"]})
+        self.assertContains(self.client.get("/crm/funil/"), "falta preencher: o que qualifica um lead")
+        Tenant.objects.filter(pk=self.tenant.pk).update(profile={"version": 4, "ready_for_ai": True, "segment_label": "Pousada e hotel"})
+        self.assertContains(self.client.get("/crm/funil/"), "Pronto para a IA montar o funil")
