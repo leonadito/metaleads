@@ -14,11 +14,8 @@ name: metaleads-beta
 services:
   web:
     build: .
-    command: >
-      sh -c "python manage.py collectstatic --noinput -v 0 &&
-      gunicorn leadmanager.wsgi:application --bind 0.0.0.0:8000 --preload
-      --worker-class gthread --workers 1 --threads 4 --timeout 120
-      --max-requests 1000 --max-requests-jitter 100 --access-logfile -"
+    # Web + task worker in one container (docker/beta-entrypoint.sh).
+    command: ["bash", "docker/beta-entrypoint.sh"]
     env_file:
       - .env
     environment:

@@ -15,3 +15,4 @@ dj-database-url==3.1.2
 whitenoise==6.12.0
 mozilla-django-oidc==5.0.2
 phonenumbers==9.0.41
+django-tasks-db[compat]==0.13.0

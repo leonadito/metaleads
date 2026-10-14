@@ -234,7 +234,14 @@ class ApiToken(models.Model):
     """Token of the lead intake API, one or more per tenant. Only the hash is
     stored; the value is shown once, when created."""
 
-    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="api_tokens")
+    tenant = models.ForeignKey(
+        Tenant, on_delete=models.PROTECT, related_name="api_tokens", null=True, blank=True
+    )
+    # Service token (Agitare's own apps, e.g. agipages, which serves every
+    # tenant): no fixed tenant; each request names the tenant by its core
+    # uuid, which must exist in the local copy. Tenant tokens are for
+    # outside integrations.
+    is_service = models.BooleanField("token de serviço", default=False)
     name = models.CharField(max_length=100)
     token_hash = models.CharField(max_length=64, unique=True, editable=False)
     prefix = models.CharField(max_length=12, editable=False)
@@ -243,12 +250,23 @@ class ApiToken(models.Model):
     revoked_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
-        return f"{self.tenant} · {self.name} ({self.prefix}…)"
+        return f"{'serviço' if self.is_service else self.tenant} · {self.name} ({self.prefix}…)"
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(is_service=True, tenant__isnull=True) | Q(is_service=False, tenant__isnull=False),
+                name="api_token_tenant_or_service",
+            )
+        ]
 
     @classmethod
-    def issue(cls, tenant, name):
+    def issue(cls, tenant, name, service=False):
         raw = "ml_" + secrets.token_urlsafe(32)
-        token = cls.objects.create(tenant=tenant, name=name, token_hash=_hash_token(raw), prefix=raw[:10])
+        token = cls.objects.create(
+            tenant=None if service else tenant, is_service=service, name=name,
+            token_hash=_hash_token(raw), prefix=raw[:10],
+        )
         return token, raw
 
     @classmethod

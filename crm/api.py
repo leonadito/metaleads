@@ -1,8 +1,11 @@
 """Lead intake API: POST /api/v1/leads
 
 Headers:
-    Authorization: Bearer <tenant token>   (crm.ApiToken; created by the
-                                            create_api_token command)
+    Authorization: Bearer <token>          (crm.ApiToken, created by the
+                                            create_api_token command: a tenant
+                                            token, or a service token for the
+                                            Agitare's own apps, which must also
+                                            send "tenant": <core uuid>)
     Idempotency-Key: <unique per lead>     (required; a retry with the same
                                             key and body gets the same answer,
                                             the same key with another body 409)
@@ -17,6 +20,7 @@ Answer: 201 when a lead was opened, 200 otherwise (re-entry or duplicate),
 import hashlib
 import json
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.utils import timezone
@@ -24,7 +28,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from .ingest import IngestError, ingest
-from .models import ApiToken, IdempotencyRecord
+from .models import ApiToken, IdempotencyRecord, Tenant
 
 
 def _error(status, message):
@@ -38,9 +42,6 @@ def create_lead(request):
     token = ApiToken.authenticate(auth[7:].strip() if auth.startswith("Bearer ") else "")
     if token is None:
         return _error(401, "token inválido")
-    tenant = token.tenant
-    if not tenant.is_active:
-        return _error(403, "tenant inativo")
 
     key = request.headers.get("Idempotency-Key", "").strip()
     if not key or len(key) > 255:
@@ -52,6 +53,19 @@ def create_lead(request):
     except ValueError:
         return _error(400, "corpo precisa ser um objeto JSON")
     body_hash = hashlib.sha256(request.body).hexdigest()
+
+    if token.is_service:
+        # The app names the tenant (core uuid); it must be in the local copy.
+        try:
+            tenant = Tenant.objects.filter(uuid=str(data.get("tenant") or "")).first()
+        except ValidationError:
+            tenant = None
+        if tenant is None:
+            return _error(422, "tenant desconhecido (uuid do core)")
+    else:
+        tenant = token.tenant  # a tenant token never writes elsewhere
+    if not tenant.is_active:
+        return _error(403, "tenant inativo")
 
     previous = IdempotencyRecord.objects.filter(tenant=tenant, key=key).first()
     if previous:

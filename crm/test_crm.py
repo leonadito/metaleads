@@ -201,3 +201,55 @@ class CoreSyncTests(TestCase):
             self.assertEqual(full_sync(), 3)
         self.assertEqual(get.call_args.kwargs["headers"], {"Authorization": "Bearer s3cret"})
         self.assertEqual(Tenant.objects.count(), 3)
+
+
+class ServiceTokenTests(TestCase):
+    def setUp(self):
+        self.tenant = make_tenant()
+        self.other = make_tenant("outra")
+        _, self.raw = ApiToken.issue(None, "agipages", service=True)
+
+    def post(self, body, key):
+        return self.client.post("/api/v1/leads", data=json.dumps(body), content_type="application/json",
+                                HTTP_AUTHORIZATION=f"Bearer {self.raw}", HTTP_IDEMPOTENCY_KEY=key)
+
+    def test_service_token_writes_to_the_tenant_named_in_the_body(self):
+        self.assertEqual(self.post({"tenant": str(self.other.uuid), "source": "agipages_form", "phone": "51999998888"}, "a").status_code, 201)
+        self.assertEqual(Lead.objects.get().tenant, self.other)
+
+    def test_service_token_needs_a_known_tenant(self):
+        self.assertEqual(self.post({"source": "agipages_form", "phone": "51999998888"}, "b").status_code, 422)
+        self.assertEqual(self.post({"tenant": str(uuid.uuid4()), "phone": "51999998888"}, "c").status_code, 422)
+        self.assertEqual(self.post({"tenant": "nao-e-uuid", "phone": "51999998888"}, "d").status_code, 422)
+        inactive = make_tenant("inativa", status="inactive")
+        self.assertEqual(self.post({"tenant": str(inactive.uuid), "phone": "51999998888"}, "e").status_code, 403)
+
+
+class DailySyncTaskTests(TestCase):
+    def test_ensure_enqueues_once(self):
+        from django_tasks_db.models import DBTaskResult
+
+        from .tasks import DAILY_SYNC_PATH, ensure_daily_sync
+
+        self.assertTrue(ensure_daily_sync())
+        self.assertFalse(ensure_daily_sync())
+        self.assertEqual(DBTaskResult.objects.filter(task_path=DAILY_SYNC_PATH).count(), 1)
+
+    def test_run_schedules_the_next_one_in_24h_or_1h_on_failure(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+        from django_tasks_db.models import DBTaskResult
+
+        from .tasks import DAILY_SYNC_PATH, sync_tenants_daily
+
+        with mock.patch("crm.tasks.full_sync", return_value=3):
+            self.assertEqual(sync_tenants_daily.call(), 3)
+        nxt = DBTaskResult.objects.get(task_path=DAILY_SYNC_PATH)
+        self.assertGreater(nxt.run_after, timezone.now() + timedelta(hours=23))
+        nxt.delete()
+        with mock.patch("crm.tasks.full_sync", side_effect=RuntimeError("core fora")):
+            with self.assertRaises(RuntimeError):
+                sync_tenants_daily.call()
+        nxt = DBTaskResult.objects.get(task_path=DAILY_SYNC_PATH)
+        self.assertLess(nxt.run_after, timezone.now() + timedelta(hours=2))

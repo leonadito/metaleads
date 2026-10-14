@@ -18,6 +18,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'leads',
     'crm',
+    'django_tasks',
+    'django_tasks_db',
 ]
 
 MIDDLEWARE = [
@@ -156,3 +158,7 @@ APSCHEDULER_RUN_NOW_TIMEOUT = 25
 # webhook Endpoint secret in the core; it also authenticates the full sync.
 CORE_API_URL = config('CORE_API_URL', default='')
 CORE_WEBHOOK_SECRET = config('CORE_WEBHOOK_SECRET', default='')
+
+# Task queue in the database (django-tasks + django-tasks-db), worked by
+# `manage.py db_worker`, the container's second process. No Redis.
+TASKS = {'default': {'BACKEND': 'django_tasks_db.DatabaseBackend'}}
