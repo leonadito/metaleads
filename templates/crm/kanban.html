@@ -6,20 +6,32 @@
   <a href="{% url 'crm_lead_new' %}" class="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark">+ Novo lead</a>
 </div>
 
-<form id="filters" class="mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]"
+<form id="filters" class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_auto_auto_auto_auto]"
       hx-get="{% url 'crm_kanban' %}" hx-target="#board" hx-swap="outerHTML" hx-push-url="true"
       hx-trigger="input changed delay:400ms from:input[name=q], change from:select">
   <input type="text" name="q" value="{{ filters.q }}" placeholder="Buscar por nome, telefone ou e-mail" aria-label="Buscar">
-  <select name="source" aria-label="Canal de entrada" class="sm:!w-56">
+  <select name="source" aria-label="Canal de entrada" class="xl:!w-56">
     <option value="">Todos os canais</option>
     {% for value, label in sources %}
     <option value="{{ value }}" {% if filters.source == value %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
-  <select name="period" aria-label="Período" class="sm:!w-48">
+  <select name="period" aria-label="Período" class="xl:!w-48">
     {% for value, label in periods %}
     <option value="{{ value }}" {% if filters.period == value %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
+  </select>
+  {% if substages %}
+  <select name="substage" aria-label="Subetapa" class="xl:!w-56">
+    <option value="">Todas as subetapas</option>
+    {% for s in substages %}
+    <option value="{{ s.pk }}" {% if filters.substage == s.pk|stringformat:"d" %}selected{% endif %}>{{ s }}{% if not s.is_active %} (desativada){% endif %}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+  <select name="review" aria-label="Revisão humana" class="xl:!w-48">
+    <option value="">Todos os leads</option>
+    <option value="1" {% if filters.review == "1" %}selected{% endif %}>Em revisão ({{ review_count }})</option>
   </select>
 </form>
 

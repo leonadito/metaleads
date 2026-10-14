@@ -1,12 +1,22 @@
 <div id="lead-main" class="grid gap-6 lg:grid-cols-[1fr_22rem]">
   <div class="space-y-6">
+    {% if lead.frozen_at %}
+    <section class="rounded-lg border border-accent bg-red-50 p-4 text-sm" role="alert">
+      <p class="font-semibold text-accent-text">Em revisão humana desde {{ lead.frozen_at|date:"d/m/Y H:i" }}</p>
+      {% if lead.review_reason %}<p class="mt-1 whitespace-pre-line text-gray-800">{{ lead.review_reason }}</p>{% endif %}
+      <p class="mt-1 text-gray-600">Mudanças automáticas estão paradas. Mova o lead para o destino certo, ou libere sem mover.</p>
+      <form class="mt-3" hx-post="{% url 'crm_lead_release' lead.uuid %}" hx-target="#lead-main" hx-swap="outerHTML">
+        <button type="submit" class="rounded-md border border-accent px-3 py-1.5 font-medium text-accent-text hover:bg-white">Liberar sem mover</button>
+      </form>
+    </section>
+    {% endif %}
     <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 class="text-xl font-semibold text-gray-900">{{ contact.name|default:"(sem nome)" }}</h1>
           <p class="text-sm text-gray-500">{{ lead.get_source_display }} · entrou em {{ lead.created_at|date:"d/m/Y H:i" }}</p>
         </div>
-        <span class="rounded-full bg-brand px-3 py-1 text-sm font-medium text-white">{{ lead.get_stage_display }}</span>
+        <span class="rounded-full bg-brand px-3 py-1 text-sm font-medium text-white">{{ lead.get_stage_display }}{% if lead.substage %} › {{ lead.substage.name }}{% endif %}</span>
       </div>
       <dl class="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
         {% if contact.phone_e164 %}
@@ -64,8 +74,12 @@
     <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <h2 class="mb-3 font-semibold">Mudar etapa</h2>
       <form class="space-y-3" hx-post="{% url 'crm_lead_stage' lead.uuid %}" hx-target="#lead-main" hx-swap="outerHTML">
-        <select name="stage" aria-label="Etapa">
-          {% for value, label in stages %}<option value="{{ value }}" {% if value == lead.stage %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        <select name="destination" aria-label="Etapa e subetapa">
+          {% for group, options in destinations %}
+          <optgroup label="{{ group }}">
+            {% for value, label in options %}<option value="{{ value }}" {% if value == current_destination %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </optgroup>
+          {% endfor %}
         </select>
         <textarea name="reason" rows="2" placeholder="Motivo (opcional)" aria-label="Motivo"></textarea>
         <button type="submit" class="w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark">Salvar etapa</button>

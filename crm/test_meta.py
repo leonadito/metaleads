@@ -202,8 +202,8 @@ class FunnelTests(MetaTestBase):
         self.lead.refresh_from_db()
         self.assertEqual(self.lead.stage, Stage.CONVERTIDO)
         self.assertIsNotNone(self.lead.closed_at)
-        history = list(LeadEvent.objects.filter(type=EventType.STAGE_CHANGED).values_list("data", flat=True))
-        self.assertEqual(history, [{"from": "criado", "to": "em_analise"}, {"from": "em_analise", "to": "convertido"}])
+        history = [(d["from"], d["to"]) for d in LeadEvent.objects.filter(type=EventType.STAGE_CHANGED).values_list("data", flat=True)]
+        self.assertEqual(history, [("criado", "em_analise"), ("em_analise", "convertido")])
         self.assertEqual(list(MetaCrmEvent.objects.values_list("event_name", flat=True)),
                          ["Criado", "Em análise", "Convertido"])
 

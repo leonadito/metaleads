@@ -13,4 +13,9 @@ urlpatterns = [
     path("crm/leads/<uuid:lead_uuid>/", views.lead_detail, name="crm_lead"),
     path("crm/leads/<uuid:lead_uuid>/etapa/", views.lead_stage, name="crm_lead_stage"),
     path("crm/leads/<uuid:lead_uuid>/nota/", views.lead_note, name="crm_lead_note"),
+    path("crm/leads/<uuid:lead_uuid>/liberar/", views.lead_release, name="crm_lead_release"),
+    path("crm/funil/", views.funnel_settings, name="crm_funnel"),
+    path("crm/funil/subetapa/", views.substage_save, name="crm_substage_save"),
+    path("crm/funil/subetapa/<int:pk>/ativa/", views.substage_toggle, name="crm_substage_toggle"),
+    path("crm/funil/subetapa/<int:pk>/ordem/", views.substage_reorder, name="crm_substage_reorder"),
 ]

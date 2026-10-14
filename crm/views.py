@@ -11,7 +11,7 @@ from functools import wraps
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
@@ -19,9 +19,9 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .funnel import change_stage
+from . import funnel
 from .ingest import IngestError, ingest
-from .models import CLOSED_STAGES, EventType, Lead, LeadAttribution, LeadEvent, Source, Stage, Tenant
+from .models import CLOSED_STAGES, EventType, Lead, LeadAttribution, LeadEvent, Source, Stage, Substage, Tenant
 
 COLUMN_LIMIT = 100
 PERIODS = [("", "Todo o período"), ("7", "Últimos 7 dias"), ("30", "Últimos 30 dias"), ("90", "Últimos 90 dias")]
@@ -71,6 +71,8 @@ def _filters(request):
         "q": request.GET.get("q", "").strip()[:100],
         "source": request.GET.get("source", ""),
         "period": request.GET.get("period", ""),
+        "substage": request.GET.get("substage", ""),
+        "review": request.GET.get("review", ""),
     }
 
 
@@ -86,6 +88,10 @@ def _filtered(tenant, f):
         qs = qs.filter(source=f["source"])
     if f["period"] in ("7", "30", "90"):
         qs = qs.filter(created_at__gte=timezone.now() - timedelta(days=int(f["period"])))
+    if f["substage"].isdigit():
+        qs = qs.filter(substage_id=int(f["substage"]))
+    if f["review"] == "1":
+        qs = qs.filter(frozen_at__isnull=False)
     return qs
 
 
@@ -105,7 +111,7 @@ def _board(request, tenant):
     qs = _filtered(tenant, f)
     counts = dict(qs.values_list("stage").annotate(n=Count("id")).values_list("stage", "n"))
     cards = (
-        qs.select_related("contact")
+        qs.select_related("contact", "substage")
         .prefetch_related(Prefetch("attributions", queryset=LeadAttribution.objects.order_by("occurred_at")))
         .order_by("-created_at")
     )
@@ -126,7 +132,11 @@ def kanban(request):
     context = _board(request, request.tenant)
     if request.headers.get("HX-Request"):
         return render(request, "crm/_board.html", context)
-    context.update(sources=Source.choices, periods=PERIODS)
+    context.update(
+        sources=Source.choices, periods=PERIODS,
+        substages=Substage.objects.filter(tenant=request.tenant).order_by("stage", "order", "id"),
+        review_count=Lead.objects.filter(tenant=request.tenant, frozen_at__isnull=False).count(),
+    )
     return render(request, "crm/kanban.html", context)
 
 
@@ -175,8 +185,14 @@ def _whatsapp_url(phone):
 EVENT_COLORS = {
     EventType.CREATED: "bg-sky-500", EventType.REENTRY: "bg-sky-300", EventType.STAGE_CHANGED: "bg-brand",
     EventType.MESSAGE: "bg-emerald-400", EventType.NOTE: "bg-amber-400",
+    EventType.REVIEW: "bg-accent", EventType.RELEASED: "bg-accent",
     EventType.EMAIL_OPENED: "bg-gray-400", EventType.EMAIL_CLICKED: "bg-gray-400",
 }
+
+
+def _where(stages, stage, substage):
+    label = stages.get(stage, stage)
+    return f"{label} > {substage}" if substage else label
 
 
 def _history(lead):
@@ -186,7 +202,9 @@ def _history(lead):
     for e in lead.events.all().order_by("-created_at"):
         d = e.data or {}
         if e.type == EventType.STAGE_CHANGED:
-            text = f"{stages.get(d.get('from'), d.get('from'))} → {stages.get(d.get('to'), d.get('to'))}"
+            text = f"{_where(stages, d.get('from'), d.get('from_substage'))} → {_where(stages, d.get('to'), d.get('to_substage'))}"
+            if d.get("by") == funnel.AUTO:
+                text += " (automático)"
         elif e.type in (EventType.CREATED, EventType.REENTRY):
             text = f"{e.get_type_display()} por {sources.get(d.get('source'), d.get('source') or '')}"
         elif e.type == EventType.MESSAGE:
@@ -197,9 +215,30 @@ def _history(lead):
     return items
 
 
+def destinations(tenant):
+    """Choices for "move to": every active sub-stage, grouped by stage; a
+    stage with no active sub-stage is a choice by itself."""
+    subs = {}
+    for s in funnel.active_substages(tenant).order_by("order", "id"):
+        subs.setdefault(s.stage, []).append((f"sub:{s.pk}", s.name))
+    return [(label, subs.get(value) or [(f"stage:{value}", label)]) for value, label in Stage.choices]
+
+
+def _parse_destination(value):
+    kind, _, ref = (value or "").partition(":")
+    if kind == "sub" and ref.isdigit():
+        return None, int(ref)
+    if kind == "stage":
+        return ref, None
+    return value, None  # plain stage (kanban)
+
+
 def _detail_context(request, lead):
     attributions = list(lead.attributions.all().order_by("-occurred_at"))
+    current = f"sub:{lead.substage_id}" if lead.substage_id else f"stage:{lead.stage}"
     return {
+        "destinations": destinations(lead.tenant),
+        "current_destination": current,
         "lead": lead,
         "contact": lead.contact,
         "answers": _answers(lead, attributions),
@@ -221,13 +260,14 @@ def lead_detail(request, lead_uuid):
 @require_POST
 def lead_stage(request, lead_uuid):
     lead = _lead(request, lead_uuid)
-    stage = request.POST.get("stage", "")
-    if stage not in Stage.values:
-        return HttpResponse("Etapa inválida.", status=400)
+    stage, substage = _parse_destination(request.POST.get("destination") or request.POST.get("stage", ""))
     message = ""
     try:
-        if change_stage(lead, stage, actor=actor(request), reason=request.POST.get("reason", "").strip()[:1000]):
-            message = f"Movido para {Stage(stage).label}."
+        result = funnel.move(lead, stage, substage, actor=actor(request),
+                             reason=request.POST.get("reason", "").strip()[:1000])
+        message = result.message
+    except funnel.FunnelError:
+        return HttpResponse("Destino inválido.", status=400)
     except IntegrityError:
         message = "Este contato já tem outro lead aberto: feche-o antes de reabrir este."
     if request.POST.get("from") == "kanban":
@@ -237,6 +277,15 @@ def lead_stage(request, lead_uuid):
     lead.refresh_from_db()
     response = render(request, "crm/_lead_main.html", _detail_context(request, lead))
     return toast(response, message) if message else response
+
+
+@tenant_required
+@require_POST
+def lead_release(request, lead_uuid):
+    lead = _lead(request, lead_uuid)
+    funnel.release(lead, actor=actor(request), reason=request.POST.get("reason", "").strip()[:1000])
+    lead.refresh_from_db()
+    return toast(render(request, "crm/_lead_main.html", _detail_context(request, lead)), "Lead liberado da revisão.")
 
 
 @tenant_required
@@ -273,3 +322,80 @@ def lead_new(request):
                 url += "?existente=1"
             return redirect(url)
     return render(request, "crm/lead_form.html", {"values": values, "error": error})
+
+
+# ── Funnel settings (sub-stages) ─────────────────────────────────────────────
+
+def _funnel_context(tenant, error=""):
+    subs = {}
+    for s in Substage.objects.filter(tenant=tenant).annotate(n=Count("leads")).order_by("order", "id"):
+        subs.setdefault(s.stage, []).append(s)
+    return {"stages": [(value, label, subs.get(value, [])) for value, label in Stage.choices], "error": error}
+
+
+def _funnel_section(request, error=""):
+    return render(request, "crm/_funnel.html", _funnel_context(request.tenant, error))
+
+
+@tenant_required
+def funnel_settings(request):
+    return render(request, "crm/funnel.html", _funnel_context(request.tenant))
+
+
+@tenant_required
+@require_POST
+def substage_save(request):
+    """Creates (no id) or edits a sub-stage. People only: the LLM never
+    changes the funnel."""
+    data = request.POST
+    name = data.get("name", "").strip()[:100]
+    if not name:
+        return _funnel_section(request, "Dê um nome à subetapa.")
+    if data.get("id"):
+        sub = Substage.objects.filter(tenant=request.tenant, pk=data["id"]).first()
+        if sub is None:
+            raise Http404
+    else:
+        stage = data.get("stage", "")
+        if stage not in Stage.values:
+            return HttpResponse("Etapa inválida.", status=400)
+        last = Substage.objects.filter(tenant=request.tenant, stage=stage).order_by("-order").first()
+        sub = Substage(tenant=request.tenant, stage=stage, order=(last.order + 1) if last else 0)
+    sub.name = name
+    sub.prompt = data.get("prompt", "").strip()[:5000]
+    sub.message_text = data.get("message_text", "").strip()[:2000]
+    try:
+        with transaction.atomic():
+            sub.save()
+    except IntegrityError:
+        return _funnel_section(request, f'Já existe uma subetapa "{name}" nesta etapa.')
+    return toast(_funnel_section(request), "Subetapa salva.")
+
+
+@tenant_required
+@require_POST
+def substage_toggle(request, pk):
+    sub = Substage.objects.filter(tenant=request.tenant, pk=pk).first()
+    if sub is None:
+        raise Http404
+    sub.is_active = not sub.is_active
+    sub.save(update_fields=["is_active", "updated_at"])
+    return toast(_funnel_section(request), "Subetapa reativada." if sub.is_active else
+                 "Subetapa desativada: os leads que estão nela continuam lá até alguém movê-los.")
+
+
+@tenant_required
+@require_POST
+def substage_reorder(request, pk):
+    sub = Substage.objects.filter(tenant=request.tenant, pk=pk).first()
+    if sub is None:
+        raise Http404
+    siblings = list(Substage.objects.filter(tenant=request.tenant, stage=sub.stage).order_by("order", "id"))
+    i = siblings.index(sub)
+    j = i - 1 if request.POST.get("dir") == "up" else i + 1
+    if 0 <= j < len(siblings):
+        siblings[i], siblings[j] = siblings[j], siblings[i]
+        for order, s in enumerate(siblings):
+            if s.order != order:
+                Substage.objects.filter(pk=s.pk).update(order=order)
+    return _funnel_section(request)

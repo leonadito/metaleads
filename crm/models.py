@@ -110,6 +110,37 @@ class Source(models.TextChoices):
     API = "api", "API"
 
 
+class Substage(models.Model):
+    """Sub-stage of one of the 6 fixed stages, per tenant (Phase 5). Created,
+    edited and deactivated only by people (owner/manager, or the agency for
+    its clients); the LLM only moves leads between the active ones. Never
+    deleted: leads and history keep pointing at it."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="substages")
+    stage = models.CharField("etapa", max_length=20, choices=Stage.choices)
+    name = models.CharField("nome", max_length=100)
+    order = models.PositiveIntegerField("ordem", default=0)
+    prompt = models.TextField(
+        "prompt", blank=True,
+        help_text="Quando um lead deve estar nesta subetapa. Guia a LLM; obrigatório quando o tenant usa LLM.",
+    )
+    message_text = models.TextField(
+        "mensagem ao entrar", blank=True,
+        help_text="Enviada ao lead quando ele entra nesta subetapa (o envio chega na Fase 6).",
+    )
+    is_active = models.BooleanField("ativa", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "subetapa"
+        ordering = ["order", "id"]
+        constraints = [models.UniqueConstraint(fields=["tenant", "stage", "name"], name="substage_unique_name")]
+
+    def __str__(self):
+        return f"{self.get_stage_display()} > {self.name}"
+
+
 class Lead(models.Model):
     """The opportunity. One table for every source; one open lead per contact
     (a new entry of the same contact while open becomes a history event)."""
@@ -119,6 +150,11 @@ class Lead(models.Model):
     contact = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="leads")
     source = models.CharField("canal de entrada", max_length=20, choices=Source.choices)
     stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.CRIADO, db_index=True)
+    substage = models.ForeignKey(Substage, on_delete=models.PROTECT, null=True, blank=True, related_name="leads")
+    # Automatic moves stopped until a person decides (back-and-forth lock,
+    # LLM unsure...): the lead waits in the human review.
+    frozen_at = models.DateTimeField("em revisão humana desde", null=True, blank=True, db_index=True)
+    review_reason = models.TextField("motivo da revisão", blank=True)
     external_id = models.CharField("id na fonte", max_length=128, blank=True)
     form_answers = models.JSONField("respostas do formulário", default=dict, blank=True)
     landing_page_uuid = models.UUIDField(null=True, blank=True)
@@ -210,6 +246,8 @@ class EventType(models.TextChoices):
     EMAIL_OPENED = "email_opened", "E-mail aberto"
     EMAIL_CLICKED = "email_clicked", "Clique no e-mail"
     NOTE = "note", "Nota"
+    REVIEW = "review", "Revisão humana"
+    RELEASED = "released", "Liberado da revisão"
 
 
 class LeadEvent(models.Model):

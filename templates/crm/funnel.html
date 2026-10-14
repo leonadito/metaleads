@@ -1,0 +1,13 @@
+{% extends "crm/base.html" %}
+{% block title %}Configurar funil{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <h1 class="text-xl font-semibold text-brand">Configurar funil</h1>
+  <p class="max-w-3xl text-sm text-gray-600">
+    As 6 etapas são fixas. Dentro de cada uma, crie as subetapas do seu atendimento. O prompt explica quando um lead deve
+    estar na subetapa: é ele que vai guiar a IA quando ela começar a mover os leads. Subetapas não são apagadas, só
+    desativadas, para o histórico continuar certo.
+  </p>
+</div>
+{% include "crm/_funnel.html" %}
+{% endblock %}

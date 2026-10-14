@@ -1,0 +1,57 @@
+<div id="funnel" class="space-y-4">
+  {% if error %}<p class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ error }}</p>{% endif %}
+  {% for value, label, subs in stages %}
+  <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm" x-data="{ adding: false }">
+    <header class="mb-3 flex items-center justify-between gap-3">
+      <h2 class="font-semibold">{{ label }}</h2>
+      <button type="button" class="rounded-md border border-gray-300 px-3 py-1 text-sm hover:border-brand" @click="adding = !adding">+ Subetapa</button>
+    </header>
+
+    <form x-cloak x-show="adding" class="mb-3 grid gap-2 rounded-md bg-gray-50 p-3"
+          hx-post="{% url 'crm_substage_save' %}" hx-target="#funnel" hx-swap="outerHTML">
+      <input type="hidden" name="stage" value="{{ value }}">
+      <input type="text" name="name" placeholder="Nome da subetapa" aria-label="Nome da subetapa" required maxlength="100">
+      <textarea name="prompt" rows="2" placeholder="Quando um lead deve estar aqui? (prompt da IA)" aria-label="Prompt"></textarea>
+      <textarea name="message_text" rows="2" placeholder="Mensagem ao lead quando entrar aqui (opcional)" aria-label="Mensagem"></textarea>
+      <div><button type="submit" class="rounded-md bg-brand px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-dark">Criar</button></div>
+    </form>
+
+    {% if subs %}
+    <ol class="divide-y divide-gray-100">
+      {% for s in subs %}
+      <li class="py-2" x-data="{ editing: false }">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-medium {% if not s.is_active %}text-gray-400 line-through{% endif %}">{{ s.name }}</span>
+          {% if not s.is_active %}<span class="rounded bg-gray-100 px-1.5 text-xs text-gray-500">desativada</span>{% endif %}
+          <span class="text-xs text-gray-500">{{ s.n }} lead{{ s.n|pluralize }}</span>
+          {% if not s.prompt %}<span class="rounded bg-amber-50 px-1.5 text-xs text-amber-800" title="A IA precisa do prompt para usar esta subetapa">sem prompt</span>{% endif %}
+          <span class="ml-auto flex items-center gap-1 text-sm">
+            <button type="button" aria-label="Subir" title="Subir" class="rounded px-2 hover:bg-gray-100"
+                    hx-post="{% url 'crm_substage_reorder' s.pk %}" hx-vals='{"dir": "up"}' hx-target="#funnel" hx-swap="outerHTML">↑</button>
+            <button type="button" aria-label="Descer" title="Descer" class="rounded px-2 hover:bg-gray-100"
+                    hx-post="{% url 'crm_substage_reorder' s.pk %}" hx-vals='{"dir": "down"}' hx-target="#funnel" hx-swap="outerHTML">↓</button>
+            <button type="button" class="rounded px-2 hover:bg-gray-100" @click="editing = !editing">Editar</button>
+            <button type="button" class="rounded px-2 hover:bg-gray-100"
+                    hx-post="{% url 'crm_substage_toggle' s.pk %}" hx-target="#funnel" hx-swap="outerHTML"
+                    {% if s.is_active %}hx-confirm="Desativar {{ s.name }}? Os leads que estão nela continuam lá até alguém movê-los."{% endif %}>
+              {% if s.is_active %}Desativar{% else %}Reativar{% endif %}</button>
+          </span>
+        </div>
+        {% if s.prompt %}<p x-show="!editing" class="mt-1 line-clamp-2 text-sm text-gray-600">{{ s.prompt }}</p>{% endif %}
+        <form x-cloak x-show="editing" class="mt-2 grid gap-2 rounded-md bg-gray-50 p-3"
+              hx-post="{% url 'crm_substage_save' %}" hx-target="#funnel" hx-swap="outerHTML">
+          <input type="hidden" name="id" value="{{ s.pk }}">
+          <input type="text" name="name" value="{{ s.name }}" aria-label="Nome" required maxlength="100">
+          <textarea name="prompt" rows="3" aria-label="Prompt" placeholder="Quando um lead deve estar aqui?">{{ s.prompt }}</textarea>
+          <textarea name="message_text" rows="2" aria-label="Mensagem" placeholder="Mensagem ao lead quando entrar aqui (opcional)">{{ s.message_text }}</textarea>
+          <div><button type="submit" class="rounded-md bg-brand px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-dark">Salvar</button></div>
+        </form>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="text-sm text-gray-400">Sem subetapas: os leads ficam direto na etapa.</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
