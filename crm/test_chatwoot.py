@@ -118,10 +118,27 @@ class ProcessMessageTests(TestCase):
         out = lead.events.get(data__message_id=2)
         self.assertEqual((out.data["direction"], out.actor), ("outgoing", "Atendente"))
 
-    def test_private_notes_activity_and_agent_first_are_ignored(self):
-        self.process(message(mtype="outgoing"))  # agent wrote first: no lead yet
+    def test_private_notes_and_activity_are_ignored(self):
         self.process(message(msg_id=5, private=True))
         self.process(message(msg_id=6, mtype="activity"))
+        self.assertFalse(Lead.objects.exists())
+        self.assertFalse(DBTaskResult.objects.exists())
+
+    def test_agent_reply_arriving_before_the_contact_message_is_kept(self):
+        # Seen in the beta: Chatwoot delivered the reply 9 ms before the
+        # contact's message that opens the lead.
+        reply = message(msg_id=9, mtype="outgoing", sender={"id": 4, "name": "Atendente", "type": "user"})
+        self.assertIn("nova tentativa", process_message.call(self.tenant.pk, reply))
+        self.process(message(msg_id=8))
+        retry = DBTaskResult.objects.get(task_path="crm.chatwoot.process_message")
+        self.assertEqual(retry.args_kwargs["args"][2], 1)
+        process_message.call(*retry.args_kwargs["args"])
+        lead = Lead.objects.get()
+        self.assertEqual(sorted(lead.events.filter(type=EventType.MESSAGE).values_list("data__message_id", flat=True)), [8, 9])
+
+    def test_agent_first_conversation_gives_up_after_the_retries(self):
+        reply = message(msg_id=9, mtype="outgoing", sender={"id": 4, "name": "Atendente"})
+        self.assertEqual(process_message.call(self.tenant.pk, reply, 3), "conversa sem lead")
         self.assertFalse(Lead.objects.exists())
 
     def test_contact_already_with_an_open_lead_gets_the_conversation(self):

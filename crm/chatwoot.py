@@ -23,11 +23,13 @@ import hmac
 import json
 import logging
 import time
+from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
 
 import requests
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django_tasks import task
@@ -139,8 +141,12 @@ def _lead_for_conversation(tenant, conversation_id):
     return Lead.objects.filter(tenant=tenant, conversation_id=conversation_id).order_by("-created_at").first()
 
 
+LEADLESS_RETRIES = 3
+LEADLESS_WAIT = timedelta(seconds=30)
+
+
 @task
-def process_message(tenant_id, payload):
+def process_message(tenant_id, payload, attempt=0):
     tenant = Tenant.objects.filter(pk=tenant_id).first()
     if tenant is None or payload.get("private"):
         return "ignorado"
@@ -179,7 +185,14 @@ def process_message(tenant_id, payload):
             result.contact.chatwoot_contact_id = sender["id"]
             result.contact.save(update_fields=["chatwoot_contact_id", "updated_at"])
     if lead is None:
-        return "conversa sem lead"  # e.g. an agent wrote first
+        # Chatwoot may deliver an agent's reply before the contact's message
+        # that opens the lead (seen in the beta: 9 ms apart). Try again a bit
+        # later; if the conversation really has no lead (agent wrote first),
+        # give up after a few tries.
+        if attempt < LEADLESS_RETRIES:
+            process_message.using(run_after=timezone.now() + LEADLESS_WAIT).enqueue(tenant_id, payload, attempt + 1)
+            return "conversa ainda sem lead; nova tentativa agendada"
+        return "conversa sem lead"
 
     message_id = payload.get("id")
     if not LeadEvent.objects.filter(lead=lead, type=EventType.MESSAGE, data__message_id=message_id).exists():
