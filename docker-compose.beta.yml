@@ -1,0 +1,38 @@
+# Beta of the Agitare ecosystem (/var/www/beta/metaleads on the VPS, branch
+# beta/ecossistema). Use with: docker compose -f docker-compose.beta.yml ...
+# Differences from the production docker-compose.yml, all deliberate:
+#   - own project name: the folder is also called "metaleads", and without it
+#     the beta would share the production compose project;
+#   - Postgres (DATABASE_URL in .env, database metaleads_beta) instead of SQLite;
+#   - no Google credentials (no secrets/ mount) and SCHEDULER_ENABLED=False:
+#     the beta runs on a copy of production data and must never touch the
+#     clients' sheets or Telegram;
+#   - the app serves /static/ itself (WhiteNoise), there is no internal-static
+#     route for the beta.
+name: metaleads-beta
+
+services:
+  web:
+    build: .
+    command: >
+      sh -c "python manage.py collectstatic --noinput -v 0 &&
+      gunicorn leadmanager.wsgi:application --bind 0.0.0.0:8000 --preload
+      --worker-class gthread --workers 1 --threads 4 --timeout 120
+      --max-requests 1000 --max-requests-jitter 100 --access-logfile -"
+    env_file:
+      - .env
+    environment:
+      SERVE_STATIC: "True"
+      SCHEDULER_ENABLED: "False"
+      MALLOC_ARENA_MAX: "2"
+    ports:
+      - "127.0.0.1:8012:8000"
+    networks:
+      - default
+      - shared-db
+    mem_limit: 256m
+    restart: unless-stopped
+
+networks:
+  shared-db:
+    external: true

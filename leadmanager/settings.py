@@ -50,12 +50,24 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'leadmanager.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Postgres when DATABASE_URL has a value (beta: shared server, database
+# metaleads_beta). Empty or missing keeps the SQLite file production uses
+# (production's .env has an empty DATABASE_URL=).
+if config('DATABASE_URL', default=''):
+    import dj_database_url
+
+    DATABASES = {
+        'default': dj_database_url.parse(
+            config('DATABASE_URL'), conn_max_age=config('CONN_MAX_AGE', default=60, cast=int)
+        )
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -72,6 +84,11 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Production serves /static/ from the host nginx (internal-static). The beta
+# has no such route, so the app serves it with WhiteNoise.
+if config('SERVE_STATIC', default=False, cast=bool):
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

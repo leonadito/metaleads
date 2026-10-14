@@ -22,6 +22,14 @@ class LeadsConfig(AppConfig):
         if 'runserver' in sys.argv and os.environ.get('RUN_MAIN') != 'true':
             return
 
+        # The beta runs on a copy of production data and must never poll the
+        # clients' sheets or Telegram (SCHEDULER_ENABLED=False in its .env).
+        from decouple import config
+
+        if not config('SCHEDULER_ENABLED', default=True, cast=bool):
+            logger.info("APScheduler desligado (SCHEDULER_ENABLED=False)")
+            return
+
         from .tasks import check_new_leads
         from .services.telegram import poll_and_reply_start
 
