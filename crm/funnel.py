@@ -81,7 +81,8 @@ def move(lead, stage=None, substage=None, *, actor, reason="", by=HUMAN):
     AUTO (the LLM). Reopening a closed lead while the contact has another
     open one raises IntegrityError (one open lead per contact)."""
     with transaction.atomic():
-        lead = Lead.objects.select_for_update().select_related("tenant", "substage").get(pk=lead.pk)
+        # of=self: Postgres cannot lock the nullable side of the substage join.
+        lead = Lead.objects.select_for_update(of=("self",)).select_related("tenant", "substage").get(pk=lead.pk)
         try:
             stage, substage = resolve(lead.tenant, stage, substage)
         except FunnelError as exc:
