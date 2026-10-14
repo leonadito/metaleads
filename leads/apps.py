@@ -11,6 +11,8 @@ class LeadsConfig(AppConfig):
     name = 'leads'
 
     def ready(self):
+        from . import backchannel  # noqa: F401  (tracks single sign-on sessions at login)
+
         import os
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.triggers.interval import IntervalTrigger

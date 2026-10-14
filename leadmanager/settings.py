@@ -114,6 +114,7 @@ if OIDC_ENABLED:
     OIDC_OP_USER_ENDPOINT = f'{_OP}/userinfo/'
     OIDC_OP_JWKS_ENDPOINT = f'{_OP}/.well-known/jwks.json'
     OIDC_OP_LOGOUT_ENDPOINT = f'{_OP}/logout/'
+    OIDC_OP_ISSUER = _OP  # checked on back-channel logout tokens
     OIDC_RP_SIGN_ALGO = 'RS256'
     OIDC_RP_SCOPES = 'openid email profile tenancy'
     OIDC_USE_PKCE = True

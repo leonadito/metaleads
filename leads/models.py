@@ -52,3 +52,13 @@ class SyncLog(models.Model):
 
     def __str__(self):
         return f"SyncLog({self.user.email}, {self.sheet_name})"
+
+
+class OIDCSession(models.Model):
+    """Which person of the Agitare Core (OIDC "sub") opened which session here,
+    so a back-channel logout from the core can end exactly those sessions
+    (several people may share one client account)."""
+
+    sub = models.UUIDField(db_index=True)
+    session_key = models.CharField(max_length=40, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)

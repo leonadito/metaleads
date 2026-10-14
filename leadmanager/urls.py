@@ -26,3 +26,7 @@ urlpatterns = [
 if settings.OIDC_ENABLED:
     # /oidc/authenticate/ (start) and /oidc/callback/ (return from the core).
     urlpatterns.insert(0, path('oidc/', include('mozilla_django_oidc.urls')))
+    # Single logout: the core POSTs a logout_token here (leads/backchannel.py).
+    from leads.backchannel import backchannel_logout
+
+    urlpatterns.insert(0, path('oidc/backchannel-logout/', backchannel_logout, name='oidc_backchannel_logout'))

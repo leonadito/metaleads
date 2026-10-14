@@ -85,6 +85,9 @@ class CoreOIDCBackend(OIDCAuthenticationBackend):
 
     @transaction.atomic
     def update_user(self, user, claims):
+        if getattr(self, 'request', None) is not None:
+            # Read by leads.backchannel at login to track this session.
+            self.request.session['oidc_sub'] = claims['sub']
         profile = _profile(user)
         if claims.get("agitare_staff"):
             user.is_staff = user.is_superuser = True
