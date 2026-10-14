@@ -3,7 +3,9 @@ from django.utils import timezone
 
 from . import meta
 from .funnel import change_stage
-from .models import ApiToken, Contact, Lead, LeadAttribution, LeadEvent, MetaCrmEvent, MetaPage, Tenant
+from .models import (
+    ApiToken, Contact, GoogleLeadFormKey, Lead, LeadAttribution, LeadEvent, MetaCrmEvent, MetaPage, Tenant,
+)
 
 
 @admin.register(Tenant)
@@ -116,3 +118,37 @@ class MetaCrmEventAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(GoogleLeadFormKey)
+class GoogleLeadFormKeyAdmin(admin.ModelAdmin):
+    list_display = ["name", "tenant", "prefix", "created_at", "last_test_at", "last_lead_at", "revoked_at"]
+    list_filter = ["tenant"]
+    actions = ["revoke"]
+
+    def get_fields(self, request, obj=None):
+        if obj is None:
+            return ["tenant", "name"]
+        return ["tenant", "name", "prefix", "created_at", "last_test_at", "last_lead_at", "revoked_at"]
+
+    def get_readonly_fields(self, request, obj=None):
+        return [] if obj is None else ["tenant", "prefix", "created_at", "last_test_at", "last_lead_at", "revoked_at"]
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            raw = GoogleLeadFormKey.new_key()
+            obj.set_key(raw)
+            super().save_model(request, obj, form, change)
+            # Shown once, only here: paste it in the Google Ads lead form.
+            self.message_user(
+                request,
+                f"Chave criada. Copie agora, ela não aparece de novo. No formulário do Google Ads: "
+                f"URL {request.build_absolute_uri('/webhooks/google-ads/')} e chave {raw}",
+                level="warning",
+            )
+            return
+        super().save_model(request, obj, form, change)
+
+    @admin.action(description="Revogar")
+    def revoke(self, request, queryset):
+        queryset.filter(revoked_at__isnull=True).update(revoked_at=timezone.now())

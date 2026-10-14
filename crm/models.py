@@ -365,3 +365,43 @@ class MetaCrmEvent(models.Model):
         verbose_name = "etapa enviada à Meta"
         verbose_name_plural = "etapas enviadas à Meta"
         ordering = ["event_time", "id"]
+
+
+class GoogleLeadFormKey(models.Model):
+    """Key of a Google Ads lead form webhook (the "google_key" set in the
+    form). It names the tenant; only the hash is stored, the value is shown
+    once in the admin, when created, to be pasted in Google Ads."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="google_form_keys")
+    name = models.CharField("formulário / uso", max_length=100)
+    key_hash = models.CharField(max_length=64, unique=True, editable=False)
+    prefix = models.CharField(max_length=12, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_lead_at = models.DateTimeField("último lead em", null=True, blank=True)
+    last_test_at = models.DateTimeField("último teste do Google em", null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "chave de formulário do Google Ads"
+        verbose_name_plural = "chaves de formulário do Google Ads"
+
+    def __str__(self):
+        return f"{self.tenant} · {self.name} ({self.prefix}…)"
+
+    @classmethod
+    def new_key(cls):
+        return "gk_" + secrets.token_urlsafe(24)
+
+    def set_key(self, raw):
+        self.key_hash = _hash_token(raw)
+        self.prefix = raw[:10]
+
+    @classmethod
+    def authenticate(cls, raw):
+        if not raw:
+            return None
+        return (
+            cls.objects.select_related("tenant")
+            .filter(key_hash=_hash_token(raw), revoked_at__isnull=True)
+            .first()
+        )
