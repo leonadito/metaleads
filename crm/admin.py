@@ -4,7 +4,7 @@ from django.utils import timezone
 from . import meta
 from .funnel import change_stage
 from .models import (
-    ApiToken, Contact, GoogleLeadFormKey, Lead, LeadAttribution, LeadEvent, MetaCrmEvent, MetaPage, Tenant,
+    ApiToken, Contact, GoogleLeadFormKey, Lead, LeadAttribution, LeadEvent, MetaCrmEvent, MetaPage, OrphanReport, Tenant,
 )
 
 
@@ -152,3 +152,34 @@ class GoogleLeadFormKeyAdmin(admin.ModelAdmin):
     @admin.action(description="Revogar")
     def revoke(self, request, queryset):
         queryset.filter(revoked_at__isnull=True).update(revoked_at=timezone.now())
+
+
+@admin.register(OrphanReport)
+class OrphanReportAdmin(admin.ModelAdmin):
+    list_display = ["created_at", "count", "failed_checks"]
+    fields = ["created_at", "count", "errors", "findings_table"]
+    readonly_fields = fields
+    actions = ["run_now"]
+
+    @admin.display(description="checagens que falharam")
+    def failed_checks(self, obj):
+        return len(obj.errors)
+
+    @admin.display(description="achados")
+    def findings_table(self, obj):
+        from django.utils.html import format_html_join
+
+        return format_html_join(
+            "", "<div>{} · {} {}</div>",
+            ((f["message"], f.get("tenant") or "-", f.get("ref") or "") for f in obj.findings),
+        ) or "nenhum"
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description="Rodar a checagem agora")
+    def run_now(self, request, queryset):
+        from .orphans import run_check
+
+        report = run_check()
+        self.message_user(request, f"Checagem feita: {report.count} achado(s), {len(report.errors)} falha(s).")

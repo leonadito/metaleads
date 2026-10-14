@@ -165,6 +165,12 @@ HOME_URL = config('HOME_URL', default='/dashboard/')
 # Chatwoot, for the "open conversation" link on the lead page.
 CHATWOOT_URL = config('CHATWOOT_URL', default='').rstrip('/')
 
+# Nightly orphan check (crm/orphans.py): agipages' read-only integrity
+# endpoint, and who gets the alert (e-mail to ADMINS; empty = log only).
+AGIPAGES_API_URL = config('AGIPAGES_API_URL', default='')
+AGIPAGES_INTEGRITY_TOKEN = config('AGIPAGES_INTEGRITY_TOKEN', default='')
+ADMINS = [(e.strip(), e.strip()) for e in config('ALERT_EMAILS', default='').split(',') if e.strip()]
+
 # Meta Lead Ads straight from the API + funnel back to Meta (crm/meta.py).
 # Agitare's Meta app (webhook signature) and its system user (Graph API).
 META_APP_SECRET = config('META_APP_SECRET', default='')

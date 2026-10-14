@@ -405,3 +405,22 @@ class GoogleLeadFormKey(models.Model):
             .filter(key_hash=_hash_token(raw), revoked_at__isnull=True)
             .first()
         )
+
+
+class OrphanReport(models.Model):
+    """Result of the nightly orphan check (crm/orphans.py): references to
+    things that no longer exist or are inactive in another app. Report and
+    alert only; nothing is ever fixed automatically."""
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    findings = models.JSONField("achados", default=list)
+    count = models.PositiveIntegerField("quantidade", default=0)
+    errors = models.JSONField("checagens que falharam", default=list)
+
+    class Meta:
+        verbose_name = "relatório de órfãos"
+        verbose_name_plural = "relatórios de órfãos"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.created_at:%d/%m/%Y %H:%M} · {self.count} achado(s)"

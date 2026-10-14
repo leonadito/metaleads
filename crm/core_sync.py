@@ -81,16 +81,21 @@ def core_webhook(request):
     return HttpResponse(status=200)
 
 
-def full_sync():
-    """Returns how many tenants were upserted."""
+def fetch_core_tenants():
+    """Every tenant of the core (Client.as_payload)."""
     response = requests.get(
         f"{settings.CORE_API_URL.rstrip('/')}/api/v1/tenants",
         headers={"Authorization": f"Bearer {settings.CORE_WEBHOOK_SECRET}"},
         timeout=30,
     )
     response.raise_for_status()
+    return response.json()["tenants"]
+
+
+def full_sync():
+    """Returns how many tenants were upserted."""
     count = 0
-    for payload in response.json()["tenants"]:
+    for payload in fetch_core_tenants():
         apply_tenant(payload)
         count += 1
     return count
