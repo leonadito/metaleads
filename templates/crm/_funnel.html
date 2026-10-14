@@ -8,11 +8,15 @@
     <span>minutos.</span>
     <button type="submit" class="rounded-md border border-gray-300 px-3 py-1 hover:border-brand">Salvar</button>
   </form>
-  {% for value, label, subs in stages %}
+  {% for value, label, subs, active_count, has_room in stages %}
   <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm" x-data="{ adding: false }">
     <header class="mb-3 flex items-center justify-between gap-3">
-      <h2 class="font-semibold">{{ label }}</h2>
+      <h2 class="font-semibold">{{ label }} <span class="text-xs font-normal text-gray-500">{{ active_count }}/{{ max_substages }} ativas</span></h2>
+      {% if has_room %}
       <button type="button" class="rounded-md border border-gray-300 px-3 py-1 text-sm hover:border-brand" @click="adding = !adding">+ Subetapa</button>
+      {% else %}
+      <span class="text-xs text-gray-500">Limite de {{ max_substages }} subetapas ativas</span>
+      {% endif %}
     </header>
 
     <form x-cloak x-show="adding" class="mb-3 grid gap-2 rounded-md bg-gray-50 p-3"
@@ -21,6 +25,7 @@
       <input type="text" name="name" placeholder="Nome da subetapa" aria-label="Nome da subetapa" required maxlength="100">
       <textarea name="prompt" rows="2" placeholder="Quando um lead deve estar aqui? (prompt da IA)" aria-label="Prompt"></textarea>
       <textarea name="message_text" rows="2" placeholder="Mensagem ao lead quando entrar aqui (opcional)" aria-label="Mensagem"></textarea>
+      <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="prompt_locked"> Bloquear edição do prompt pela IA</label>
       <div><button type="submit" class="rounded-md bg-brand px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-dark">Criar</button></div>
     </form>
 
@@ -32,6 +37,9 @@
           <span class="font-medium {% if not s.is_active %}text-gray-400 line-through{% endif %}">{{ s.name }}</span>
           {% if not s.is_active %}<span class="rounded bg-gray-100 px-1.5 text-xs text-gray-500">desativada</span>{% endif %}
           <span class="text-xs text-gray-500">{{ s.n }} lead{{ s.n|pluralize }}</span>
+          {% if s.created_by == "llm" %}<span class="rounded bg-indigo-50 px-1.5 text-xs text-brand" title="Criada pela IA">criada pela IA</span>{% endif %}
+          {% if s.prompt and s.prompt_by == "llm" %}<span class="rounded bg-indigo-50 px-1.5 text-xs text-brand">prompt da IA</span>{% endif %}
+          {% if s.prompt_locked %}<span class="rounded bg-gray-100 px-1.5 text-xs text-gray-700" title="A IA não altera este prompt">prompt bloqueado para a IA</span>{% endif %}
           {% if not s.prompt %}<span class="rounded bg-amber-50 px-1.5 text-xs text-amber-800" title="A IA precisa do prompt para usar esta subetapa">sem prompt</span>{% endif %}
           <span class="ml-auto flex items-center gap-1 text-sm">
             <button type="button" aria-label="Subir" title="Subir" class="rounded px-2 hover:bg-gray-100"
@@ -52,6 +60,7 @@
           <input type="text" name="name" value="{{ s.name }}" aria-label="Nome" required maxlength="100">
           <textarea name="prompt" rows="3" aria-label="Prompt" placeholder="Quando um lead deve estar aqui?">{{ s.prompt }}</textarea>
           <textarea name="message_text" rows="2" aria-label="Mensagem" placeholder="Mensagem ao lead quando entrar aqui (opcional)">{{ s.message_text }}</textarea>
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="prompt_locked" {% if s.prompt_locked %}checked{% endif %}> Bloquear edição do prompt pela IA</label>
           <div><button type="submit" class="rounded-md bg-brand px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-dark">Salvar</button></div>
         </form>
       </li>

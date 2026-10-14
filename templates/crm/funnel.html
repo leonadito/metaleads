@@ -4,9 +4,10 @@
 <div class="mb-4">
   <h1 class="text-xl font-semibold text-brand">Configurar funil</h1>
   <p class="max-w-3xl text-sm text-gray-600">
-    As 6 etapas são fixas. Dentro de cada uma, crie as subetapas do seu atendimento. O prompt explica quando um lead deve
-    estar na subetapa: é ele que vai guiar a IA quando ela começar a mover os leads. Subetapas não são apagadas, só
-    desativadas, para o histórico continuar certo.
+    As 6 etapas são fixas, e cada uma pode ter até 5 subetapas ativas. Quando a IA for ligada, ela monta as subetapas a
+    partir do perfil do cliente e cria novas quando um lead não se encaixa em nenhuma, explicando no prompt por que cada
+    uma existe. Você também pode criar subetapas e editar qualquer prompt; marque "bloquear edição do prompt pela IA"
+    para a IA não mudar um prompt. Só pessoas desativam subetapas, e elas nunca são apagadas, para o histórico continuar certo.
   </p>
 </div>
 {% include "crm/_funnel.html" %}

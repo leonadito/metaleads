@@ -149,3 +149,76 @@ class FunnelScreensTests(TestCase):
         self.client.post(f"/crm/leads/{self.lead.uuid}/liberar/")
         self.lead.refresh_from_db()
         self.assertIsNone(self.lead.frozen_at)
+
+
+class FunnelBuildingTests(TestCase):
+    """Decision of 2026-10-14: the LLM creates sub-stages and writes their
+    prompts; at most 5 active per stage; prompts can be locked against the
+    LLM; only people deactivate."""
+
+    def setUp(self):
+        self.tenant = make_tenant()
+
+    def test_limit_of_five_active_per_stage_for_everyone(self):
+        subs = [funnel.create_substage(self.tenant, Stage.QUALIFICADO, f"S{i}", by=Substage.LLM) for i in range(5)]
+        for by in (Substage.LLM, Substage.HUMAN):
+            with self.assertRaisesMessage(funnel.FunnelError, "5 subetapas ativas"):
+                funnel.create_substage(self.tenant, Stage.QUALIFICADO, "Sexta", by=by)
+        funnel.create_substage(self.tenant, Stage.PERDIDO, "Outra etapa")  # the limit is per stage
+        funnel.set_substage_active(subs[0], False)
+        sixth = funnel.create_substage(self.tenant, Stage.QUALIFICADO, "Sexta")
+        with self.assertRaisesMessage(funnel.FunnelError, "5 subetapas ativas"):
+            funnel.set_substage_active(subs[0], True)  # reactivating respects the limit too
+        self.assertEqual(sixth.order, 5)
+
+    def test_authorship_and_llm_limits(self):
+        sub = funnel.create_substage(self.tenant, Stage.EM_ANALISE, "Visita", prompt="agendou", by=Substage.LLM)
+        self.assertEqual((sub.created_by, sub.prompt_by, sub.prompt_locked), ("llm", "llm", False))
+        funnel.update_substage(sub, prompt="agendou visita ao imóvel", by=Substage.LLM)
+        for forbidden in ({"name": "X"}, {"message_text": "Oi"}, {"prompt_locked": False}):
+            with self.assertRaises(funnel.FunnelError):
+                funnel.update_substage(sub, by=Substage.LLM, **forbidden)
+        funnel.update_substage(sub, prompt="escrito por uma pessoa", prompt_locked=True)
+        sub.refresh_from_db()
+        self.assertEqual((sub.prompt_by, sub.prompt_locked), ("human", True))
+        with self.assertRaisesMessage(funnel.FunnelError, "bloqueado"):
+            funnel.update_substage(sub, prompt="a IA tentando mudar", by=Substage.LLM)
+        funnel.update_substage(sub, prompt_locked=False)
+        funnel.update_substage(sub, prompt="a IA pode de novo", by=Substage.LLM)
+        sub.refresh_from_db()
+        self.assertEqual((sub.prompt, sub.prompt_by), ("a IA pode de novo", "llm"))
+
+    def test_llm_cannot_lock_on_creation(self):
+        sub = funnel.create_substage(self.tenant, Stage.CRIADO, "Novo", by=Substage.LLM, prompt_locked=True)
+        self.assertFalse(sub.prompt_locked)
+
+    def test_duplicate_and_empty_names(self):
+        funnel.create_substage(self.tenant, Stage.CRIADO, "Novo")
+        with self.assertRaisesMessage(funnel.FunnelError, "Já existe"):
+            funnel.create_substage(self.tenant, Stage.CRIADO, "Novo", by=Substage.LLM)
+        with self.assertRaises(funnel.FunnelError):
+            funnel.create_substage(self.tenant, Stage.CRIADO, "  ")
+
+
+@override_settings(AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"])
+class FunnelScreenLimitsTests(TestCase):
+    def setUp(self):
+        self.tenant = make_tenant()
+        user = User.objects.create_user(username="dona")
+        UserProfile.objects.create(user=user, core_client_uuid=self.tenant.uuid)
+        self.client.force_login(user)
+
+    def test_screen_shows_limit_lock_and_origin(self):
+        for i in range(5):
+            funnel.create_substage(self.tenant, Stage.CRIADO, f"S{i}", by=Substage.LLM, prompt="p")
+        page = self.client.get("/crm/funil/")
+        self.assertContains(page, "5/5 ativas")
+        self.assertContains(page, "Limite de 5 subetapas ativas")
+        self.assertContains(page, "criada pela IA")
+        r = self.client.post("/crm/funil/subetapa/", {"stage": "criado", "name": "Sexta"})
+        self.assertContains(r, "5 subetapas ativas")
+        sub = Substage.objects.get(name="S0")
+        self.client.post("/crm/funil/subetapa/", {"id": sub.pk, "name": "S0", "prompt": "meu", "prompt_locked": "on"})
+        sub.refresh_from_db()
+        self.assertEqual((sub.prompt, sub.prompt_by, sub.prompt_locked), ("meu", "human", True))
+        self.assertContains(self.client.get("/crm/funil/"), "prompt bloqueado para a IA")

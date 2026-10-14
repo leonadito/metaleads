@@ -20,7 +20,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import chatwoot_actions, meta
-from .models import CLOSED_STAGES, EventType, Lead, LeadEvent, Stage, Substage
+from .models import CLOSED_STAGES, MAX_SUBSTAGES_PER_STAGE, EventType, Lead, LeadEvent, Stage, Substage
 
 BACK_AND_FORTH_WINDOW = timedelta(hours=24)
 HUMAN, AUTO = "human", "auto"
@@ -158,3 +158,82 @@ def change_stage(lead, stage, actor, reason=""):
     if stage not in Stage.values:
         raise ValueError(f"etapa inválida: {stage}")
     return move(lead, stage, actor=actor, reason=reason).moved
+
+
+# ── Building the funnel (people now; the LLM from Phase 7) ───────────────────
+
+def _check_room(tenant, stage, exclude=None):
+    active = Substage.objects.filter(tenant=tenant, stage=stage, is_active=True)
+    if exclude is not None:
+        active = active.exclude(pk=exclude.pk)
+    if active.count() >= MAX_SUBSTAGES_PER_STAGE:
+        raise FunnelError(
+            f"{Stage(stage).label} já tem {MAX_SUBSTAGES_PER_STAGE} subetapas ativas (o máximo). "
+            "Desative uma antes de criar outra."
+        )
+
+
+def create_substage(tenant, stage, name, *, prompt="", message_text="", by=Substage.HUMAN, prompt_locked=False):
+    """New sub-stage at the end of the stage. The LLM uses this too (when it
+    builds the funnel, or when a lead fits no sub-stage), writing in the
+    prompt why the sub-stage exists."""
+    if stage not in Stage.values:
+        raise FunnelError(f"etapa inválida: {stage}")
+    name = (name or "").strip()[:100]
+    if not name:
+        raise FunnelError("Dê um nome à subetapa.")
+    if Substage.objects.filter(tenant=tenant, stage=stage, name=name).exists():
+        raise FunnelError(f'Já existe uma subetapa "{name}" nesta etapa.')
+    _check_room(tenant, stage)
+    last = Substage.objects.filter(tenant=tenant, stage=stage).order_by("-order").first()
+    sub = Substage.objects.create(
+        tenant=tenant, stage=stage, name=name, order=(last.order + 1) if last else 0,
+        prompt=(prompt or "").strip()[:5000], message_text=(message_text or "").strip()[:2000],
+        created_by=by, prompt_by=by, prompt_locked=bool(prompt_locked) and by == Substage.HUMAN,
+    )
+    chatwoot_actions.funnel_changed(tenant)
+    return sub
+
+
+def update_substage(sub, *, by=Substage.HUMAN, name=None, prompt=None, message_text=None, prompt_locked=None):
+    """Edits a sub-stage. The LLM may only rewrite the prompt, and not when a
+    person locked it; name, message and the lock are for people."""
+    if by == Substage.LLM:
+        if name is not None or message_text is not None or prompt_locked is not None:
+            raise FunnelError("a IA só altera o prompt")
+        if sub.prompt_locked:
+            raise FunnelError("prompt bloqueado para a IA")
+    fields = []
+    if name is not None:
+        name = name.strip()[:100]
+        if not name:
+            raise FunnelError("Dê um nome à subetapa.")
+        if name != sub.name and Substage.objects.filter(tenant=sub.tenant, stage=sub.stage, name=name).exists():
+            raise FunnelError(f'Já existe uma subetapa "{name}" nesta etapa.')
+        sub.name = name
+        fields.append("name")
+    if prompt is not None and prompt.strip() != sub.prompt:
+        sub.prompt, sub.prompt_by = prompt.strip()[:5000], by
+        fields += ["prompt", "prompt_by"]
+    if message_text is not None:
+        sub.message_text = message_text.strip()[:2000]
+        fields.append("message_text")
+    if prompt_locked is not None:
+        sub.prompt_locked = bool(prompt_locked)
+        fields.append("prompt_locked")
+    if fields:
+        sub.save(update_fields=fields + ["updated_at"])
+        if "name" in fields:
+            chatwoot_actions.funnel_changed(sub.tenant)
+    return sub
+
+
+def set_substage_active(sub, active):
+    """People only (decision of 2026-10-14: the LLM never deactivates).
+    Reactivating respects the limit of active sub-stages."""
+    if active and not sub.is_active:
+        _check_room(sub.tenant, sub.stage, exclude=sub)
+    sub.is_active = active
+    sub.save(update_fields=["is_active", "updated_at"])
+    chatwoot_actions.funnel_changed(sub.tenant)
+    return sub

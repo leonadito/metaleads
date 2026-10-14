@@ -331,11 +331,17 @@ def lead_new(request):
 # ── Funnel settings (sub-stages) ─────────────────────────────────────────────
 
 def _funnel_context(tenant, error=""):
+    from .models import MAX_SUBSTAGES_PER_STAGE
+
     subs = {}
     for s in Substage.objects.filter(tenant=tenant).annotate(n=Count("leads")).order_by("order", "id"):
         subs.setdefault(s.stage, []).append(s)
-    return {"stages": [(value, label, subs.get(value, [])) for value, label in Stage.choices], "error": error,
-            "tenant": tenant}
+    stages = []
+    for value, label in Stage.choices:
+        items = subs.get(value, [])
+        active = sum(1 for s in items if s.is_active)
+        stages.append((value, label, items, active, active < MAX_SUBSTAGES_PER_STAGE))
+    return {"stages": stages, "error": error, "tenant": tenant, "max_substages": MAX_SUBSTAGES_PER_STAGE}
 
 
 def _funnel_section(request, error=""):
@@ -350,31 +356,27 @@ def funnel_settings(request):
 @tenant_required
 @require_POST
 def substage_save(request):
-    """Creates (no id) or edits a sub-stage. People only: the LLM never
-    changes the funnel."""
+    """Creates (no id) or edits a sub-stage, as a person (crm.funnel holds the
+    rules: limit per stage, unique names, prompt lock)."""
     data = request.POST
-    name = data.get("name", "").strip()[:100]
-    if not name:
-        return _funnel_section(request, "Dê um nome à subetapa.")
-    if data.get("id"):
-        sub = Substage.objects.filter(tenant=request.tenant, pk=data["id"]).first()
-        if sub is None:
-            raise Http404
-    else:
-        stage = data.get("stage", "")
-        if stage not in Stage.values:
-            return HttpResponse("Etapa inválida.", status=400)
-        last = Substage.objects.filter(tenant=request.tenant, stage=stage).order_by("-order").first()
-        sub = Substage(tenant=request.tenant, stage=stage, order=(last.order + 1) if last else 0)
-    sub.name = name
-    sub.prompt = data.get("prompt", "").strip()[:5000]
-    sub.message_text = data.get("message_text", "").strip()[:2000]
+    locked = data.get("prompt_locked") == "on"
     try:
         with transaction.atomic():
-            sub.save()
-            chatwoot_actions.funnel_changed(request.tenant)
+            if data.get("id"):
+                sub = Substage.objects.filter(tenant=request.tenant, pk=data["id"]).first()
+                if sub is None:
+                    raise Http404
+                funnel.update_substage(sub, name=data.get("name", ""), prompt=data.get("prompt", ""),
+                                       message_text=data.get("message_text", ""), prompt_locked=locked)
+            else:
+                if data.get("stage", "") not in Stage.values:
+                    return HttpResponse("Etapa inválida.", status=400)
+                funnel.create_substage(request.tenant, data["stage"], data.get("name", ""), prompt=data.get("prompt", ""),
+                                       message_text=data.get("message_text", ""), prompt_locked=locked)
+    except funnel.FunnelError as exc:
+        return _funnel_section(request, str(exc))
     except IntegrityError:
-        return _funnel_section(request, f'Já existe uma subetapa "{name}" nesta etapa.')
+        return _funnel_section(request, "Já existe uma subetapa com esse nome nesta etapa.")
     return toast(_funnel_section(request), "Subetapa salva.")
 
 
@@ -384,9 +386,10 @@ def substage_toggle(request, pk):
     sub = Substage.objects.filter(tenant=request.tenant, pk=pk).first()
     if sub is None:
         raise Http404
-    sub.is_active = not sub.is_active
-    sub.save(update_fields=["is_active", "updated_at"])
-    chatwoot_actions.funnel_changed(request.tenant)
+    try:
+        funnel.set_substage_active(sub, not sub.is_active)
+    except funnel.FunnelError as exc:
+        return _funnel_section(request, str(exc))
     return toast(_funnel_section(request), "Subetapa reativada." if sub.is_active else
                  "Subetapa desativada: os leads que estão nela continuam lá até alguém movê-los.")
 

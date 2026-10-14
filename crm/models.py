@@ -120,11 +120,22 @@ class Source(models.TextChoices):
     API = "api", "API"
 
 
+MAX_SUBSTAGES_PER_STAGE = 5
+
+
 class Substage(models.Model):
-    """Sub-stage of one of the 6 fixed stages, per tenant (Phase 5). Created,
-    edited and deactivated only by people (owner/manager, or the agency for
-    its clients); the LLM only moves leads between the active ones. Never
-    deleted: leads and history keep pointing at it."""
+    """Sub-stage of one of the 6 fixed stages, per tenant (Phase 5).
+
+    Decision of 2026-10-14 (replaces "only people create sub-stages"): the
+    LLM builds the funnel from the client's profile when the AI is turned on,
+    and creates a sub-stage when a lead fits none, writing in the prompt why
+    it exists. At most 5 active sub-stages per stage, for everyone. People
+    may also create sub-stages and edit any prompt; a prompt can be locked
+    against the LLM. Only people deactivate. Never deleted: leads and history
+    keep pointing at it."""
+
+    LLM, HUMAN = "llm", "human"
+    AUTHORS = [(LLM, "IA"), (HUMAN, "Pessoa")]
 
     tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="substages")
     stage = models.CharField("etapa", max_length=20, choices=Stage.choices)
@@ -139,6 +150,12 @@ class Substage(models.Model):
         help_text="Enviada ao lead quando ele entra nesta subetapa (o envio chega na Fase 6).",
     )
     is_active = models.BooleanField("ativa", default=True)
+    created_by = models.CharField("criada por", max_length=5, choices=AUTHORS, default=HUMAN)
+    prompt_by = models.CharField("prompt escrito por", max_length=5, choices=AUTHORS, default=HUMAN)
+    prompt_locked = models.BooleanField(
+        "bloquear edição do prompt pela IA", default=False,
+        help_text="Ligado: a IA não altera este prompt (só uma pessoa).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
