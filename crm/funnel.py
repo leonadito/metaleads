@@ -19,7 +19,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from . import meta
+from . import chatwoot_actions, meta
 from .models import CLOSED_STAGES, EventType, Lead, LeadEvent, Stage, Substage
 
 BACK_AND_FORTH_WINDOW = timedelta(hours=24)
@@ -73,6 +73,7 @@ def _send_to_review(lead, reason, actor, data):
     lead.review_reason = reason
     lead.save(update_fields=["frozen_at", "review_reason", "updated_at"])
     LeadEvent.objects.create(lead=lead, tenant=lead.tenant, type=EventType.REVIEW, actor=actor, reason=reason, data=data)
+    chatwoot_actions.after_move(lead, review=True)
     return MoveResult("review", lead, reason)
 
 
@@ -134,18 +135,20 @@ def move(lead, stage=None, substage=None, *, actor, reason="", by=HUMAN):
         )
         if previous_stage != stage:
             meta.record_stage(lead, stage, now)
+        chatwoot_actions.after_move(lead, released=released)
     return MoveResult("moved", lead, f"Movido para {_label(stage, substage)}.")
 
 
 def release(lead, *, actor, reason=""):
     """A person takes the lead out of review without moving it."""
     with transaction.atomic():
-        lead = Lead.objects.select_for_update().get(pk=lead.pk)
+        lead = Lead.objects.select_for_update().select_related("tenant").get(pk=lead.pk)
         if not lead.frozen_at:
             return False
         lead.frozen_at, lead.review_reason = None, ""
         lead.save(update_fields=["frozen_at", "review_reason", "updated_at"])
         LeadEvent.objects.create(lead=lead, tenant=lead.tenant, type=EventType.RELEASED, actor=actor, reason=reason)
+        chatwoot_actions.after_release(lead)
     return True
 
 

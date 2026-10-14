@@ -1,5 +1,13 @@
 <div id="funnel" class="space-y-4">
   {% if error %}<p class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ error }}</p>{% endif %}
+  <form class="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white p-4 text-sm shadow-sm"
+        hx-post="{% url 'crm_waiting_settings' %}" hx-target="#funnel" hx-swap="outerHTML">
+    <label for="f-wait">Avisar no Chatwoot quando uma mensagem do lead ficar sem resposta por</label>
+    <input type="number" id="f-wait" name="waiting_alert_minutes" min="1" max="1440" value="{{ tenant.waiting_alert_minutes }}"
+           class="w-20 rounded-md border border-gray-300 px-2 py-1">
+    <span>minutos.</span>
+    <button type="submit" class="rounded-md border border-gray-300 px-3 py-1 hover:border-brand">Salvar</button>
+  </form>
   {% for value, label, subs in stages %}
   <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm" x-data="{ adding: false }">
     <header class="mb-3 flex items-center justify-between gap-3">

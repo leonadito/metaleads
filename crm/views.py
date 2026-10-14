@@ -19,7 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from . import funnel
+from . import chatwoot_actions, funnel
 from .ingest import IngestError, ingest
 from .models import CLOSED_STAGES, EventType, Lead, LeadAttribution, LeadEvent, Source, Stage, Substage, Tenant
 
@@ -73,6 +73,7 @@ def _filters(request):
         "period": request.GET.get("period", ""),
         "substage": request.GET.get("substage", ""),
         "review": request.GET.get("review", ""),
+        "waiting": request.GET.get("waiting", ""),
     }
 
 
@@ -92,6 +93,8 @@ def _filtered(tenant, f):
         qs = qs.filter(substage_id=int(f["substage"]))
     if f["review"] == "1":
         qs = qs.filter(frozen_at__isnull=False)
+    if f["waiting"] == "1":
+        qs = qs.filter(waiting_since__isnull=False)
     return qs
 
 
@@ -136,6 +139,7 @@ def kanban(request):
         sources=Source.choices, periods=PERIODS,
         substages=Substage.objects.filter(tenant=request.tenant).order_by("stage", "order", "id"),
         review_count=Lead.objects.filter(tenant=request.tenant, frozen_at__isnull=False).count(),
+        waiting_count=Lead.objects.filter(tenant=request.tenant, waiting_since__isnull=False).count(),
     )
     return render(request, "crm/kanban.html", context)
 
@@ -330,7 +334,8 @@ def _funnel_context(tenant, error=""):
     subs = {}
     for s in Substage.objects.filter(tenant=tenant).annotate(n=Count("leads")).order_by("order", "id"):
         subs.setdefault(s.stage, []).append(s)
-    return {"stages": [(value, label, subs.get(value, [])) for value, label in Stage.choices], "error": error}
+    return {"stages": [(value, label, subs.get(value, [])) for value, label in Stage.choices], "error": error,
+            "tenant": tenant}
 
 
 def _funnel_section(request, error=""):
@@ -367,6 +372,7 @@ def substage_save(request):
     try:
         with transaction.atomic():
             sub.save()
+            chatwoot_actions.funnel_changed(request.tenant)
     except IntegrityError:
         return _funnel_section(request, f'Já existe uma subetapa "{name}" nesta etapa.')
     return toast(_funnel_section(request), "Subetapa salva.")
@@ -380,6 +386,7 @@ def substage_toggle(request, pk):
         raise Http404
     sub.is_active = not sub.is_active
     sub.save(update_fields=["is_active", "updated_at"])
+    chatwoot_actions.funnel_changed(request.tenant)
     return toast(_funnel_section(request), "Subetapa reativada." if sub.is_active else
                  "Subetapa desativada: os leads que estão nela continuam lá até alguém movê-los.")
 
@@ -398,4 +405,19 @@ def substage_reorder(request, pk):
         for order, s in enumerate(siblings):
             if s.order != order:
                 Substage.objects.filter(pk=s.pk).update(order=order)
+        chatwoot_actions.funnel_changed(request.tenant)
     return _funnel_section(request)
+
+
+@tenant_required
+@require_POST
+def waiting_settings(request):
+    try:
+        minutes = int(request.POST.get("waiting_alert_minutes", ""))
+    except ValueError:
+        minutes = 0
+    if not 1 <= minutes <= 1440:
+        return toast(_funnel_section(request, "Tempo de aviso: de 1 a 1440 minutos."), "Valor inválido.")
+    Tenant.objects.filter(pk=request.tenant.pk).update(waiting_alert_minutes=minutes)
+    request.tenant.waiting_alert_minutes = minutes
+    return toast(_funnel_section(request), "Tempo de aviso salvo.")

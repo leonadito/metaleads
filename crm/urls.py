@@ -18,4 +18,5 @@ urlpatterns = [
     path("crm/funil/subetapa/", views.substage_save, name="crm_substage_save"),
     path("crm/funil/subetapa/<int:pk>/ativa/", views.substage_toggle, name="crm_substage_toggle"),
     path("crm/funil/subetapa/<int:pk>/ordem/", views.substage_reorder, name="crm_substage_reorder"),
+    path("crm/funil/aviso/", views.waiting_settings, name="crm_waiting_settings"),
 ]

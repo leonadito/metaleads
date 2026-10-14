@@ -26,9 +26,10 @@
           class="cursor-grab rounded-md border border-gray-200 bg-white p-3 text-sm shadow-sm hover:border-brand">
         <a href="{% url 'crm_lead' lead.uuid %}" class="block">
           <p class="font-medium text-gray-900">{{ lead.contact.name|default:"(sem nome)" }}</p>
-          {% if lead.frozen_at or lead.substage %}
+          {% if lead.frozen_at or lead.substage or lead.waiting_since %}
           <p class="my-1 flex flex-wrap gap-1 text-xs">
             {% if lead.frozen_at %}<span class="rounded bg-red-100 px-1.5 py-0.5 font-medium text-accent-text" title="{{ lead.review_reason }}">Revisão</span>{% endif %}
+            {% if lead.waiting_since %}<span class="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900" title="Mensagem do lead sem resposta de atendente">Esperando desde {{ lead.waiting_since|date:"d/m H:i" }}</span>{% endif %}
             {% if lead.substage %}<span class="rounded bg-indigo-50 px-1.5 py-0.5 text-brand">{{ lead.substage.name }}</span>{% endif %}
           </p>
           {% endif %}

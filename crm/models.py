@@ -30,6 +30,16 @@ class Tenant(models.Model):
     # Secret of the account webhook (signs Chatwoot's calls); read from the
     # core on demand (crm/chatwoot.py), never sent in the tenant webhooks.
     chatwoot_webhook_secret = models.CharField(max_length=128, blank=True)
+    # Token of the account's Agent Bot "Agitare CRM" (labels, private notes,
+    # the "Subetapa" attribute) and the administrator mentioned when a
+    # conversation has nobody assigned; read from the core like the secret.
+    chatwoot_bot_token = models.CharField(max_length=128, blank=True)
+    chatwoot_admin_id = models.PositiveIntegerField(null=True, blank=True)
+    chatwoot_admin_name = models.CharField(max_length=200, blank=True)
+    waiting_alert_minutes = models.PositiveIntegerField(
+        "tempo de aviso (min)", default=15,
+        help_text="Mensagem do lead sem resposta de atendente por mais que isso gera aviso no Chatwoot.",
+    )
     core_updated_at = models.DateTimeField(null=True, blank=True)
     synced_at = models.DateTimeField(auto_now=True)
 
@@ -155,6 +165,9 @@ class Lead(models.Model):
     # LLM unsure...): the lead waits in the human review.
     frozen_at = models.DateTimeField("em revisão humana desde", null=True, blank=True, db_index=True)
     review_reason = models.TextField("motivo da revisão", blank=True)
+    # Last message of the lead still without an agent's answer (Chatwoot).
+    waiting_since = models.DateTimeField("esperando resposta desde", null=True, blank=True, db_index=True)
+    waiting_alerted_at = models.DateTimeField(null=True, blank=True)
     external_id = models.CharField("id na fonte", max_length=128, blank=True)
     form_answers = models.JSONField("respostas do formulário", default=dict, blank=True)
     landing_page_uuid = models.UUIDField(null=True, blank=True)

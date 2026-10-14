@@ -34,6 +34,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django_tasks import task
 
+from . import chatwoot_actions
 from .ingest import IngestError, ingest
 from .models import EventType, Lead, LeadEvent, Source, Tenant
 
@@ -64,16 +65,9 @@ def _message_type(value):
 
 
 def fetch_secret(tenant):
-    response = requests.get(
-        f"{settings.CORE_API_URL.rstrip('/')}/api/v1/tenants/{tenant.uuid}/chatwoot",
-        headers={"Authorization": f"Bearer {settings.CORE_WEBHOOK_SECRET}"},
-        timeout=10,
-    )
-    if response.status_code != 200:
-        return ""
-    secret = response.json().get("webhook_secret") or ""
-    Tenant.objects.filter(pk=tenant.pk).update(chatwoot_webhook_secret=secret)
-    return secret
+    """Reads the account credentials again from the core (the bot token and
+    administrator come along) and returns the webhook secret."""
+    return chatwoot_actions.fetch_credentials(tenant).get("webhook_secret") or ""
 
 
 def _valid(secret, body, timestamp, signature, now=None):
@@ -105,8 +99,11 @@ def chatwoot_webhook(request):
         # First call, or the secret changed: read it again from the core, once.
         if not _valid(fetch_secret(tenant), request.body, timestamp, signature):
             return HttpResponseForbidden("assinatura inválida")
-    if payload.get("event") == "message_created":
+    event = payload.get("event")
+    if event == "message_created":
         process_message.enqueue(tenant.pk, payload)
+    elif event in ("conversation_updated", "conversation_status_changed"):
+        chatwoot_actions.conversation_changed.enqueue(tenant.pk, payload)
     return HttpResponse(status=200)
 
 
@@ -197,6 +194,9 @@ def process_message(tenant_id, payload, attempt=0):
     message_id = payload.get("id")
     if not LeadEvent.objects.filter(lead=lead, type=EventType.MESSAGE, data__message_id=message_id).exists():
         sender = payload.get("sender") or {}
+        chatwoot_actions.message_seen(
+            lead, MESSAGE_TYPES[mtype], sender.get("type") or ("contact" if mtype == INCOMING else ""),
+        )
         LeadEvent.objects.create(
             lead=lead,
             tenant=tenant,

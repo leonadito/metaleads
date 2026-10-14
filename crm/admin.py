@@ -13,7 +13,8 @@ class TenantAdmin(admin.ModelAdmin):
     list_display = ["name", "slug", "status", "is_courtesy", "chatwoot_account_id", "synced_at"]
     list_filter = ["status", "is_courtesy"]
     search_fields = ["name", "slug"]
-    readonly_fields = [f.name for f in Tenant._meta.fields]
+    exclude = ["chatwoot_webhook_secret", "chatwoot_bot_token"]
+    readonly_fields = [f.name for f in Tenant._meta.fields if f.name not in ("chatwoot_webhook_secret", "chatwoot_bot_token")]
 
     def has_add_permission(self, request):
         return False  # copied from the core

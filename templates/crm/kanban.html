@@ -6,7 +6,7 @@
   <a href="{% url 'crm_lead_new' %}" class="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark">+ Novo lead</a>
 </div>
 
-<form id="filters" class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_auto_auto_auto_auto]"
+<form id="filters" class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_auto_auto_auto_auto_auto]"
       hx-get="{% url 'crm_kanban' %}" hx-target="#board" hx-swap="outerHTML" hx-push-url="true"
       hx-trigger="input changed delay:400ms from:input[name=q], change from:select">
   <input type="text" name="q" value="{{ filters.q }}" placeholder="Buscar por nome, telefone ou e-mail" aria-label="Buscar">
@@ -32,6 +32,10 @@
   <select name="review" aria-label="Revisão humana" class="xl:!w-48">
     <option value="">Todos os leads</option>
     <option value="1" {% if filters.review == "1" %}selected{% endif %}>Em revisão ({{ review_count }})</option>
+  </select>
+  <select name="waiting" aria-label="Esperando resposta" class="xl:!w-56">
+    <option value="">Com ou sem resposta</option>
+    <option value="1" {% if filters.waiting == "1" %}selected{% endif %}>Esperando resposta ({{ waiting_count }})</option>
   </select>
 </form>
 
