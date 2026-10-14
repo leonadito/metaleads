@@ -27,6 +27,9 @@ class Tenant(models.Model):
     status = models.CharField(max_length=10, default="active")
     is_courtesy = models.BooleanField(default=False)
     chatwoot_account_id = models.PositiveIntegerField(null=True, blank=True)
+    # Secret of the account webhook (signs Chatwoot's calls); read from the
+    # core on demand (crm/chatwoot.py), never sent in the tenant webhooks.
+    chatwoot_webhook_secret = models.CharField(max_length=128, blank=True)
     core_updated_at = models.DateTimeField(null=True, blank=True)
     synced_at = models.DateTimeField(auto_now=True)
 
