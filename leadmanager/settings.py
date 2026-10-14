@@ -96,6 +96,33 @@ LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/dashboard/'
 LOGOUT_REDIRECT_URL = '/login/'
 
+# Single sign-on with the Agitare Core (leads/oidc.py). Off unless the client
+# id is set, so production keeps its local login until the cutover. With it
+# on, /login/ goes to the core; the Django admin keeps its password login.
+OIDC_RP_CLIENT_ID = config('OIDC_RP_CLIENT_ID', default='')
+OIDC_ENABLED = bool(OIDC_RP_CLIENT_ID)
+if OIDC_ENABLED:
+    INSTALLED_APPS.append('mozilla_django_oidc')
+    AUTHENTICATION_BACKENDS = [
+        'leads.oidc.CoreOIDCBackend',
+        'django.contrib.auth.backends.ModelBackend',
+    ]
+    OIDC_RP_CLIENT_SECRET = config('OIDC_RP_CLIENT_SECRET')
+    _OP = config('OIDC_OP_BASE_URL').rstrip('/')  # e.g. https://id.beta.agitare.com.br/o
+    OIDC_OP_AUTHORIZATION_ENDPOINT = f'{_OP}/authorize/'
+    OIDC_OP_TOKEN_ENDPOINT = f'{_OP}/token/'
+    OIDC_OP_USER_ENDPOINT = f'{_OP}/userinfo/'
+    OIDC_OP_JWKS_ENDPOINT = f'{_OP}/.well-known/jwks.json'
+    OIDC_OP_LOGOUT_ENDPOINT = f'{_OP}/logout/'
+    OIDC_RP_SIGN_ALGO = 'RS256'
+    OIDC_RP_SCOPES = 'openid email profile tenancy'
+    OIDC_USE_PKCE = True
+    OIDC_STORE_ID_TOKEN = True
+    OIDC_OP_LOGOUT_URL_METHOD = 'leads.oidc.provider_logout'
+    OIDC_POST_LOGOUT_REDIRECT_URI = f"{config('SITE_URL', default='https://metaleads.agitare.com.br').rstrip('/')}/login/?saiu=1"
+    LOGIN_URL = 'oidc_authentication_init'
+    LOGIN_REDIRECT_URL_FAILURE = '/login/?falhou=1'
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',

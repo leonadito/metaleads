@@ -8,6 +8,11 @@ class UserProfile(models.Model):
     telegram_chat_id = models.CharField(max_length=100, blank=True, default='')
     telegram_enabled = models.BooleanField(default=False)
     selected_tab_names = models.JSONField(default=list)  # [] = show all
+    # Single sign-on with the Agitare Core. In metaleads a login is a client:
+    # core_client_uuid links this account to the client (tenant) in the core;
+    # core_user_uuid is set only on Agitare staff accounts (one per person).
+    core_client_uuid = models.UUIDField(null=True, blank=True, unique=True, editable=False)
+    core_user_uuid = models.UUIDField(null=True, blank=True, unique=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

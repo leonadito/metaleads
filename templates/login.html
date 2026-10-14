@@ -17,7 +17,18 @@
     {% if form.errors %}
     <div class="alert alert-error">Email ou senha incorretos.</div>
     {% endif %}
+    {% if request.GET.saiu %}
+    <div class="alert">Você saiu da sua conta.</div>
+    {% elif request.GET.falhou %}
+    <div class="alert alert-error">Não foi possível entrar com esta conta. Fale com a Agitare se você deveria ter acesso.</div>
+    {% endif %}
 
+    {% if oidc_enabled %}
+    <a href="{% url 'oidc_authentication_init' %}" class="btn btn-primary btn-block">Entrar com a conta Agitare</a>
+    {% if not request.GET.local %}<p class="auth-subtitle"><a href="?local=1">Entrar com senha local</a></p>{% endif %}
+    {% endif %}
+
+    {% if not oidc_enabled or request.GET.local %}
     <form method="post" class="auth-form">
       {% csrf_token %}
       <div class="form-group">
@@ -31,6 +42,7 @@
       <input type="hidden" name="next" value="{{ next }}">
       <button type="submit" class="btn btn-primary btn-block">Entrar</button>
     </form>
+    {% endif %}
 
   </div>
 </body>
