@@ -75,7 +75,31 @@
     {% endif %}
   </div>
 
-  <aside class="space-y-6">
+  {% if outbound %}
+  <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm lg:col-start-1">
+    <h2 class="mb-3 font-semibold">Mensagens do CRM</h2>
+    <ul class="space-y-3 text-sm">
+      {% for m in outbound %}
+      <li class="rounded-md bg-gray-50 p-3" x-data="{ open: false }">
+        <p class="font-medium">{{ m.get_kind_display }} · {{ m.get_channel_display }} ·
+          <span class="{% if m.status == 'sent' %}text-emerald-700{% elif m.status == 'queued' %}text-brand{% else %}text-accent-text{% endif %}">{{ m.get_status_display }}</span>
+          <span class="font-normal text-gray-500">({{ m.sent_at|default:m.created_at|date:"d/m/Y H:i" }})</span></p>
+        {% if m.subject %}<p class="text-gray-700">{{ m.subject }}</p>{% endif %}
+        {% if m.reason %}<p class="text-gray-600">{{ m.reason }}</p>{% endif %}
+        {% if m.status != 'queued' %}
+        <button type="button" class="mt-1 text-xs text-gray-600 hover:text-brand" @click="open = !open">Reenviar de propósito</button>
+        <form x-cloak x-show="open" method="post" action="{% url 'crm_message_resend' m.uuid %}" class="mt-2 flex gap-2">
+          {% csrf_token %}
+          <input type="text" name="reason" placeholder="Motivo do reenvio" aria-label="Motivo do reenvio" required>
+          <button type="submit" class="shrink-0 rounded-md border border-gray-300 px-3 text-sm hover:border-brand">Reenviar</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+  <aside class="space-y-6 lg:col-start-2 lg:row-start-1 lg:row-span-2">
     <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <h2 class="mb-3 font-semibold">Mudar etapa</h2>
       <form class="space-y-3" hx-post="{% url 'crm_lead_stage' lead.uuid %}" hx-target="#lead-main" hx-swap="outerHTML">

@@ -40,6 +40,14 @@ class Tenant(models.Model):
     # daily check): the base for the LLM to build the funnel (Phase 7).
     profile = models.JSONField("perfil do cliente", default=dict, blank=True)
     profile_version = models.PositiveIntegerField(default=0)
+    # Outgoing messages (Phase 6, crm/messaging.py).
+    chatwoot_inboxes = models.JSONField("inboxes do Chatwoot", default=list, blank=True)  # read from the core
+    resend_window_days = models.PositiveIntegerField(
+        "janela de reenvio (dias)", default=7,
+        help_text="A mesma mensagem (inicial ou de subetapa) não sai de novo para o mesmo lead dentro desse prazo.",
+    )
+    email_hourly_cap = models.PositiveIntegerField("e-mails por hora", default=30)
+    email_daily_cap = models.PositiveIntegerField("e-mails por dia (depois do aquecimento)", default=200)
     waiting_alert_minutes = models.PositiveIntegerField(
         "tempo de aviso (min)", default=15,
         help_text="Mensagem do lead sem resposta de atendente por mais que isso gera aviso no Chatwoot.",
@@ -280,6 +288,9 @@ class EventType(models.TextChoices):
     EMAIL_OPENED = "email_opened", "E-mail aberto"
     EMAIL_CLICKED = "email_clicked", "Clique no e-mail"
     NOTE = "note", "Nota"
+    MESSAGE_SENT = "message_sent", "Mensagem enviada"
+    MESSAGE_SKIPPED = "message_skipped", "Mensagem não enviada"
+    UNSUBSCRIBED = "unsubscribed", "Descadastro"
     REVIEW = "review", "Revisão humana"
     RELEASED = "released", "Liberado da revisão"
 
@@ -496,3 +507,117 @@ class OrphanReport(models.Model):
 
     def __str__(self):
         return f"{self.created_at:%d/%m/%Y %H:%M} · {self.count} achado(s)"
+
+
+
+class Channel(models.TextChoices):
+    EMAIL = "email", "E-mail"
+    WHATSAPP = "whatsapp", "WhatsApp"
+    INSTAGRAM = "instagram", "Instagram Direct"
+    MESSENGER = "messenger", "Messenger"
+    SITE_CHAT = "site_chat", "Chat do site"
+    API = "api", "API"
+
+
+class InitialMessage(models.Model):
+    """First message to a form lead (decision of 2026-10-12): a form lead
+    arrives without a conversation, so the company starts it. One row per
+    form (source + form key); the row with an empty form key is the
+    tenant's default, used by every form without its own."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="initial_messages")
+    source = models.CharField("fonte", max_length=20, blank=True)  # agipages_form, meta_form, google_ads_form
+    form_key = models.CharField("formulário", max_length=128, blank=True)  # page uuid or form id; "" = default
+    form_label = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField("enviar", default=True)
+    send_email = models.BooleanField("por e-mail", default=True)
+    email_subject = models.CharField("assunto", max_length=200, blank=True)
+    email_body = models.TextField("texto do e-mail", blank=True)
+    send_whatsapp = models.BooleanField("por WhatsApp", default=True)
+    whatsapp_template = models.CharField(
+        "template do WhatsApp", max_length=100, blank=True,
+        help_text="Nome do template aprovado pela Meta (a empresa iniciando a conversa só pode usar template).",
+    )
+    whatsapp_language = models.CharField("idioma do template", max_length=10, default="pt_BR")
+    whatsapp_params = models.JSONField(
+        "variáveis do template", default=list, blank=True,
+        help_text='Na ordem do template, ex.: ["nome", "pagina"].',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "mensagem inicial"
+        verbose_name_plural = "mensagens iniciais"
+        constraints = [models.UniqueConstraint(fields=["tenant", "source", "form_key"], name="initial_message_per_form")]
+
+    def __str__(self):
+        return self.form_label or ("Padrão" if not self.form_key else self.form_key)
+
+    @property
+    def is_default(self):
+        return not self.form_key
+
+
+class OutboundMessage(models.Model):
+    """Queue of messages the CRM sends through Chatwoot (Phase 6). Nothing
+    is dropped: a message waits for the e-mail limits, and what cannot go
+    (24-hour window, suppression, already sent) is recorded as skipped with
+    the reason."""
+
+    QUEUED, SENT, SKIPPED, FAILED = "queued", "sent", "skipped", "failed"
+    STATUS_CHOICES = [(QUEUED, "Na fila"), (SENT, "Enviada"), (SKIPPED, "Não enviada"), (FAILED, "Falhou")]
+    INITIAL, SUBSTAGE, MANUAL = "initial", "substage", "manual"
+    KIND_CHOICES = [(INITIAL, "Mensagem inicial"), (SUBSTAGE, "Mensagem da subetapa"), (MANUAL, "Manual")]
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="+")
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="outbound_messages")
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    dedupe_key = models.CharField(max_length=100, blank=True)  # "initial", "substage:<id>"
+    channel = models.CharField(max_length=12, choices=Channel.choices)
+    inbox_id = models.PositiveIntegerField(null=True, blank=True)
+    conversation_id = models.PositiveIntegerField(null=True, blank=True)
+    subject = models.CharField(max_length=200, blank=True)
+    body = models.TextField(blank=True)
+    template = models.JSONField(default=dict, blank=True)  # WhatsApp: name, language, params
+    priority = models.PositiveSmallIntegerField(default=5)  # lower first; answers before first contacts
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=QUEUED, db_index=True)
+    reason = models.TextField(blank=True)
+    forced_by = models.CharField("reenviada de propósito por", max_length=200, blank=True)
+    attempts = models.PositiveIntegerField(default=0)
+    send_after = models.DateTimeField(db_index=True)
+    sent_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    chatwoot_message_id = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "mensagem enviada"
+        verbose_name_plural = "mensagens enviadas"
+        ordering = ["-created_at"]
+
+
+class Suppression(models.Model):
+    """Addresses the CRM never writes to again (unsubscribe, permanent bounce,
+    complaint, manual), per tenant. Checked before every send."""
+
+    UNSUBSCRIBE, BOUNCE, COMPLAINT, MANUAL = "unsubscribe", "bounce", "complaint", "manual"
+    REASONS = [(UNSUBSCRIBE, "Descadastro"), (BOUNCE, "Endereço inexistente"), (COMPLAINT, "Reclamação"), (MANUAL, "Manual")]
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="suppressions")
+    address = models.CharField("e-mail ou telefone", max_length=255)  # e-mail lower-case or E.164
+    reason = models.CharField(max_length=12, choices=REASONS)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "endereço bloqueado"
+        verbose_name_plural = "endereços bloqueados"
+        constraints = [models.UniqueConstraint(fields=["tenant", "address"], name="suppression_unique")]
+
+
+class TrackedLink(models.Model):
+    """A link of a sent e-mail, rewritten to /t/<token> to record clicks."""
+
+    token = models.CharField(max_length=32, unique=True)
+    message = models.ForeignKey(OutboundMessage, on_delete=models.CASCADE, related_name="links")
+    url = models.URLField(max_length=2000)
+    clicks = models.PositiveIntegerField(default=0)

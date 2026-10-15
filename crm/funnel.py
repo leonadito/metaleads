@@ -19,7 +19,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from . import chatwoot_actions, meta
+from . import chatwoot_actions, messaging, meta
 from .models import CLOSED_STAGES, MAX_SUBSTAGES_PER_STAGE, EventType, Lead, LeadEvent, Stage, Substage
 
 BACK_AND_FORTH_WINDOW = timedelta(hours=24)
@@ -136,6 +136,8 @@ def move(lead, stage=None, substage=None, *, actor, reason="", by=HUMAN):
         if previous_stage != stage:
             meta.record_stage(lead, stage, now)
         chatwoot_actions.after_move(lead, released=released)
+        if substage is not None and substage != previous_sub:
+            messaging.on_substage_entered(lead, substage)
     return MoveResult("moved", lead, f"Movido para {_label(stage, substage)}.")
 
 

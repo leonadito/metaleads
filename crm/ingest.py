@@ -189,6 +189,9 @@ def _ingest(tenant, data, actor, source, phone, email, channels, external_id, wa
         if occurred_at < now:  # read late (polling, backfill): keep the real date
             Lead.objects.filter(pk=lead.pk).update(created_at=occurred_at)
             lead.created_at = occurred_at
+        from .messaging import on_new_lead
+
+        on_new_lead(lead)  # initial message of form leads (after the commit)
     else:
         merged = {**lead.form_answers, **answers}
         if merged != lead.form_answers:

@@ -34,7 +34,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django_tasks import task
 
-from . import chatwoot_actions
+from . import chatwoot_actions, messaging
 from .ingest import IngestError, ingest
 from .models import EventType, Lead, LeadEvent, Source, Tenant
 
@@ -154,6 +154,12 @@ def process_message(tenant_id, payload, attempt=0):
     conversation_id = conversation.get("id")
     if not conversation_id:
         return "sem conversa"
+    sender = payload.get("sender") or {}
+    if mtype == INCOMING and messaging.is_bounce(sender.get("email")):
+        # Delivery failure notice in the e-mail inbox: never a lead; the
+        # addresses the CRM e-mailed go to the suppression list.
+        found = messaging.record_bounce(tenant, payload.get("content") or "")
+        return f"devolução: {', '.join(found) or 'sem endereço nosso'}"
 
     lead = _lead_for_conversation(tenant, conversation_id)
     if lead is None and mtype == INCOMING:

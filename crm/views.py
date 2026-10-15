@@ -190,6 +190,8 @@ EVENT_COLORS = {
     EventType.CREATED: "bg-sky-500", EventType.REENTRY: "bg-sky-300", EventType.STAGE_CHANGED: "bg-brand",
     EventType.MESSAGE: "bg-emerald-400", EventType.NOTE: "bg-amber-400",
     EventType.REVIEW: "bg-accent", EventType.RELEASED: "bg-accent",
+    EventType.MESSAGE_SENT: "bg-emerald-600", EventType.MESSAGE_SKIPPED: "bg-gray-400",
+    EventType.UNSUBSCRIBED: "bg-accent",
     EventType.EMAIL_OPENED: "bg-gray-400", EventType.EMAIL_CLICKED: "bg-gray-400",
 }
 
@@ -250,6 +252,7 @@ def _detail_context(request, lead):
         "history": _history(lead),
         "stages": Stage.choices,
         "chatwoot_url": _chatwoot_url(lead),
+        "outbound": lead.outbound_messages.all()[:20],
         "whatsapp_url": _whatsapp_url(lead.contact.phone_e164),
     }
 

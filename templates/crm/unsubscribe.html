@@ -1,0 +1,27 @@
+{% load static %}<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Descadastro · {{ company }}</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-900">
+  <main class="mx-auto max-w-md px-4 py-16">
+    <div class="rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm">
+      {% if done %}
+      <h1 class="mb-2 text-xl font-semibold text-brand">Pronto</h1>
+      <p class="text-gray-600">{{ email }} não vai mais receber e-mails de {{ company }}.</p>
+      {% else %}
+      <h1 class="mb-2 text-xl font-semibold text-brand">Parar de receber e-mails</h1>
+      <p class="mb-6 text-gray-600">Confirme para que {{ email|default:"este endereço" }} não receba mais e-mails de {{ company }}.</p>
+      <form method="post">
+        <button type="submit" class="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark">Confirmar descadastro</button>
+      </form>
+      {% endif %}
+    </div>
+  </main>
+</body>
+</html>

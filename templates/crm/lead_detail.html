@@ -7,5 +7,10 @@
   Este contato já tinha um lead aberto: o cadastro foi registrado como nova entrada no histórico dele.
 </div>
 {% endif %}
+{% if request.GET.reenvio %}
+<div class="mb-4 rounded-md bg-gray-100 px-4 py-3 text-sm">
+  {% if request.GET.reenvio == "sem-motivo" %}Escreva o motivo do reenvio.{% elif request.GET.reenvio == "queued" %}Mensagem na fila para reenvio.{% else %}O reenvio não foi feito: veja o motivo na lista de mensagens.{% endif %}
+</div>
+{% endif %}
 {% include "crm/_lead_main.html" %}
 {% endblock %}
