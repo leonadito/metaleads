@@ -124,3 +124,21 @@ class AISwitchTests(TestCase):
         self.client.post("/crm/funil/ia/", {"action": "off"})
         self.tenant.refresh_from_db()
         self.assertIsNone(self.tenant.ai_enabled_at)
+
+
+@override_settings(AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"])
+class ProfileChangedNoticeTests(TestCase):
+    def test_incomplete_profile_hides_the_review_button(self):
+        tenant = Tenant.objects.create(uuid=uuid.uuid4(), name="Alto", slug="alto", ai_enabled_at=timezone.now(),
+                                       ai_funnel_built_at=timezone.now(), ai_funnel_profile_version=3,
+                                       profile={**PROFILE, "version": 4})
+        user = User.objects.create_user(username="dona")
+        UserProfile.objects.create(user=user, core_client_uuid=tenant.uuid)
+        self.client.force_login(user)
+        page = self.client.get("/crm/funil/")
+        self.assertContains(page, "O perfil mudou (agora versão 4)")
+        self.assertContains(page, "Revisar o funil com a IA")
+        Tenant.objects.filter(pk=tenant.pk).update(profile={**PROFILE, "version": 5, "ready_for_ai": False})
+        page = self.client.get("/crm/funil/")
+        self.assertContains(page, "O perfil mudou e está incompleto; complete para revisar o funil com a IA.")
+        self.assertNotContains(page, "Revisar o funil com a IA</button>")

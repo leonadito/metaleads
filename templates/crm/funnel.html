@@ -28,11 +28,17 @@
     {% if tenant.ai_funnel_built_at %}Funil montado pela IA em {{ tenant.ai_funnel_built_at|date:"d/m/Y H:i" }} (perfil versão {{ tenant.ai_funnel_profile_version }}).{% else %}Montando o funil a partir do perfil… recarregue em instantes.{% endif %}</p>
   {% if tenant.ai_last_error %}<p class="mt-1 text-accent-text">Última tentativa falhou: {{ tenant.ai_last_error }}</p>{% endif %}
   {% if tenant.ai_funnel_profile_version and profile.version and profile.version != tenant.ai_funnel_profile_version %}
+  {% if profile.ready_for_ai %}
   <p class="mt-1 text-amber-800">O perfil mudou (agora versão {{ profile.version }}). Peça à IA para revisar o funil: ela só mexe nos prompts não bloqueados e só cria subetapas dentro do limite.</p>
+  {% else %}
+  <p class="mt-1 text-amber-800">O perfil mudou e está incompleto; complete para revisar o funil com a IA.</p>
+  {% endif %}
   {% endif %}
   <div class="mt-2 flex flex-wrap gap-2">
+    {% if profile.ready_for_ai %}
     <form method="post" action="{% url 'crm_ai_switch' %}">{% csrf_token %}<input type="hidden" name="action" value="rebuild">
       <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-brand">Revisar o funil com a IA</button></form>
+    {% endif %}
     <form method="post" action="{% url 'crm_ai_switch' %}" onsubmit="return confirm('Desligar a IA deste cliente? O funil fica como está.')">{% csrf_token %}<input type="hidden" name="action" value="off">
       <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-accent">Desligar</button></form>
   </div>
