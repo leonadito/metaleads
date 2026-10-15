@@ -20,7 +20,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import chatwoot_actions, messaging, meta
-from .models import CLOSED_STAGES, MAX_SUBSTAGES_PER_STAGE, EventType, Lead, LeadEvent, Stage, Substage
+from .models import (
+    CLOSED_STAGES, DEFAULT_STAGE_PROMPTS, MAX_SUBSTAGES_PER_STAGE, EventType, Lead, LeadEvent, Stage, StagePrompt,
+    Substage,
+)
 
 BACK_AND_FORTH_WINDOW = timedelta(hours=24)
 HUMAN, AUTO = "human", "auto"
@@ -239,3 +242,49 @@ def set_substage_active(sub, active):
     sub.save(update_fields=["is_active", "updated_at"])
     chatwoot_actions.funnel_changed(sub.tenant)
     return sub
+
+
+
+# ── Master prompt of each stage (decision of 2026-10-15) ─────────────────────
+
+def stage_prompts(tenant):
+    """{stage: {"prompt", "by", "locked"}} for the 6 stages; "system" when the
+    tenant has none yet (generic text)."""
+    own = {p.stage: p for p in StagePrompt.objects.filter(tenant=tenant)}
+    out = {}
+    for value, _ in Stage.choices:
+        p = own.get(value)
+        out[value] = ({"prompt": p.prompt, "by": p.prompt_by, "locked": p.prompt_locked} if p else
+                      {"prompt": DEFAULT_STAGE_PROMPTS[value], "by": "system", "locked": False})
+    return out
+
+
+def set_stage_prompt(tenant, stage, prompt, *, by=StagePrompt.HUMAN, prompt_locked=None, profile_version=None):
+    """Same rules as the sub-stage prompts: the LLM never rewrites a locked
+    master prompt and never changes the lock. An empty prompt from a person
+    goes back to the system's generic text."""
+    if stage not in Stage.values:
+        raise FunnelError(f"etapa inválida: {stage}")
+    current = StagePrompt.objects.filter(tenant=tenant, stage=stage).first()
+    if by == StagePrompt.LLM:
+        if prompt_locked is not None:
+            raise FunnelError("a IA não muda o bloqueio")
+        if current and current.prompt_locked:
+            raise FunnelError("prompt mestre bloqueado para a IA")
+    text = (prompt or "").strip()[:5000]
+    if not text:
+        if by == StagePrompt.LLM:
+            raise FunnelError("prompt vazio")
+        if current:
+            current.delete()
+        return None
+    if current is None:
+        current = StagePrompt(tenant=tenant, stage=stage)
+    if text != current.prompt:
+        current.prompt, current.prompt_by = text, by
+    if prompt_locked is not None:
+        current.prompt_locked = bool(prompt_locked)
+    if profile_version is not None:
+        current.profile_version = profile_version
+    current.save()
+    return current

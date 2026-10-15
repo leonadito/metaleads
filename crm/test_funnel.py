@@ -241,3 +241,58 @@ class FunnelProfileNoticeTests(TestCase):
         self.assertContains(self.client.get("/crm/funil/"), "falta preencher: o que qualifica um lead")
         Tenant.objects.filter(pk=self.tenant.pk).update(profile={"version": 4, "ready_for_ai": True, "segment_label": "Pousada e hotel"})
         self.assertContains(self.client.get("/crm/funil/"), "Pronto para a IA montar o funil")
+
+
+class StagePromptTests(TestCase):
+    """Decision of 2026-10-15: a master prompt per stage and tenant."""
+
+    def setUp(self):
+        from .models import StagePrompt
+
+        self.StagePrompt = StagePrompt
+        self.tenant = make_tenant()
+
+    def test_generic_text_until_someone_writes_one(self):
+        prompts = funnel.stage_prompts(self.tenant)
+        self.assertEqual(len(prompts), 6)
+        self.assertEqual(prompts["qualificado"]["by"], "system")
+        funnel.set_stage_prompt(self.tenant, "qualificado", "Tem entrada e quer comprar em até 6 meses.", by="llm", profile_version=2)
+        p = funnel.stage_prompts(self.tenant)["qualificado"]
+        self.assertEqual((p["prompt"], p["by"], p["locked"]), ("Tem entrada e quer comprar em até 6 meses.", "llm", False))
+        self.assertEqual(self.StagePrompt.objects.get().profile_version, 2)
+
+    def test_lock_rules_like_the_sub_stages(self):
+        funnel.set_stage_prompt(self.tenant, "criado", "escrito por pessoa", prompt_locked=True)
+        with self.assertRaisesMessage(funnel.FunnelError, "bloqueado"):
+            funnel.set_stage_prompt(self.tenant, "criado", "a IA tentando", by="llm")
+        with self.assertRaises(funnel.FunnelError):
+            funnel.set_stage_prompt(self.tenant, "perdido", "x", by="llm", prompt_locked=True)
+        funnel.set_stage_prompt(self.tenant, "criado", "escrito por pessoa", prompt_locked=False)
+        funnel.set_stage_prompt(self.tenant, "criado", "a IA pode de novo", by="llm")
+        self.assertEqual(self.StagePrompt.objects.get(stage="criado").prompt_by, "llm")
+
+    def test_empty_from_a_person_goes_back_to_the_generic_text(self):
+        funnel.set_stage_prompt(self.tenant, "convertido", "Assinou o contrato.")
+        funnel.set_stage_prompt(self.tenant, "convertido", "  ")
+        self.assertEqual(funnel.stage_prompts(self.tenant)["convertido"]["by"], "system")
+        with self.assertRaises(funnel.FunnelError):
+            funnel.set_stage_prompt(self.tenant, "convertido", "", by="llm")
+
+
+@override_settings(AUTHENTICATION_BACKENDS=["django.contrib.auth.backends.ModelBackend"])
+class StagePromptScreenTests(TestCase):
+    def setUp(self):
+        self.tenant = make_tenant()
+        user = User.objects.create_user(username="dona")
+        UserProfile.objects.create(user=user, core_client_uuid=self.tenant.uuid)
+        self.client.force_login(user)
+
+    def test_edit_on_the_funnel_page(self):
+        page = self.client.get("/crm/funil/")
+        self.assertContains(page, "Prompt mestre")
+        self.assertContains(page, "genérico do sistema")
+        r = self.client.post("/crm/funil/prompt-mestre/", {"stage": "qualificado", "prompt": "Quer visitar o decorado.",
+                                                            "prompt_locked": "on"})
+        self.assertContains(r, "Quer visitar o decorado.")
+        self.assertContains(r, "bloqueado para a IA")
+        self.assertContains(r, "escrito por pessoa")

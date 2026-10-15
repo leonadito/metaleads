@@ -8,7 +8,7 @@
     <span>minutos.</span>
     <button type="submit" class="rounded-md border border-gray-300 px-3 py-1 hover:border-brand">Salvar</button>
   </form>
-  {% for value, label, subs, active_count, has_room in stages %}
+  {% for value, label, subs, active_count, has_room, master in stages %}
   <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm" x-data="{ adding: false }">
     <header class="mb-3 flex items-center justify-between gap-3">
       <h2 class="font-semibold">{{ label }} <span class="text-xs font-normal text-gray-500">{{ active_count }}/{{ max_substages }} ativas</span></h2>
@@ -18,6 +18,25 @@
       <span class="text-xs text-gray-500">Limite de {{ max_substages }} subetapas ativas</span>
       {% endif %}
     </header>
+
+    <div class="mb-3 rounded-md border border-indigo-100 bg-indigo-50/50 p-3 text-sm" x-data="{ editing: false }">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-medium text-brand">Prompt mestre</span>
+        {% if master.by == "system" %}<span class="rounded bg-gray-100 px-1.5 text-xs text-gray-600">genérico do sistema</span>
+        {% elif master.by == "llm" %}<span class="rounded bg-indigo-100 px-1.5 text-xs text-brand">escrito pela IA</span>
+        {% else %}<span class="rounded bg-white px-1.5 text-xs text-gray-700">escrito por pessoa</span>{% endif %}
+        {% if master.locked %}<span class="rounded bg-gray-100 px-1.5 text-xs text-gray-700">bloqueado para a IA</span>{% endif %}
+        <button type="button" class="ml-auto rounded px-2 hover:bg-white" @click="editing = !editing">Editar</button>
+      </div>
+      <p x-show="!editing" class="mt-1 text-gray-700">{{ master.prompt }}</p>
+      <form x-cloak x-show="editing" class="mt-2 grid gap-2" hx-post="{% url 'crm_stage_prompt_save' %}" hx-target="#funnel" hx-swap="outerHTML">
+        <input type="hidden" name="stage" value="{{ value }}">
+        <textarea name="prompt" rows="3" aria-label="Prompt mestre de {{ label }}">{% if master.by != "system" %}{{ master.prompt }}{% endif %}</textarea>
+        <p class="text-xs text-gray-500">O que esta etapa significa para o negócio do cliente. As subetapas detalham, nunca contradizem. Vazio = volta ao texto genérico.</p>
+        <label class="flex items-center gap-2"><input type="checkbox" name="prompt_locked" {% if master.locked %}checked{% endif %}> Bloquear edição do prompt pela IA</label>
+        <div><button type="submit" class="rounded-md bg-brand px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-dark">Salvar prompt mestre</button></div>
+      </form>
+    </div>
 
     <form x-cloak x-show="adding" class="mb-3 grid gap-2 rounded-md bg-gray-50 p-3"
           hx-post="{% url 'crm_substage_save' %}" hx-target="#funnel" hx-swap="outerHTML">

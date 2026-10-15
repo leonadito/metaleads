@@ -22,6 +22,7 @@ urlpatterns = [
     path("crm/funil/subetapa/<int:pk>/ativa/", views.substage_toggle, name="crm_substage_toggle"),
     path("crm/funil/subetapa/<int:pk>/ordem/", views.substage_reorder, name="crm_substage_reorder"),
     path("crm/funil/aviso/", views.waiting_settings, name="crm_waiting_settings"),
+    path("crm/funil/prompt-mestre/", views.stage_prompt_save, name="crm_stage_prompt_save"),
     path("crm/mensagens/", messages_views.messages_page, name="crm_messages"),
     path("crm/mensagens/limites/", messages_views.limits_save, name="crm_messages_limits"),
     path("crm/mensagens/inicial/", messages_views.initial_save, name="crm_initial_save"),

@@ -134,6 +134,46 @@ class Source(models.TextChoices):
 
 MAX_SUBSTAGES_PER_STAGE = 5
 
+# Generic master prompt of each stage, valid while the LLM has not written the
+# tenant's own (decision of 2026-10-15; default values rule).
+DEFAULT_STAGE_PROMPTS = {
+    "criado": "O lead acabou de chegar e ainda não houve conversa de verdade: só a entrada pelo formulário, pelo "
+              "anúncio ou pela primeira mensagem, ou a empresa já tentou contato e ele ainda não respondeu.",
+    "em_analise": "O lead respondeu e está conversando: tira dúvidas e recebe informações, mas ainda não deu sinais "
+                  "claros de que tem o perfil e a intenção de comprar.",
+    "qualificado": "O lead tem o perfil do cliente da empresa e mostrou intenção real de comprar: necessidade, "
+                   "condição (orçamento ou forma de pagamento) e prazo compatíveis com a oferta.",
+    "nao_qualificado": "O lead não tem o perfil do cliente da empresa ou não pode comprar agora: está fora da região, "
+                       "não tem orçamento ou procura algo que a empresa não oferece. Pode voltar no futuro.",
+    "convertido": "A venda foi concluída: o lead fechou negócio (contrato, pagamento, matrícula, reserva ou o que "
+                  "conta como venda para a empresa).",
+    "perdido": "O lead desistiu, escolheu outra empresa ou parou de responder depois de várias tentativas de contato.",
+}
+
+
+class StagePrompt(models.Model):
+    """Master prompt of one of the 6 stages, per tenant (decision of
+    2026-10-15): what the stage means for this client's business. The
+    sub-stages detail it and never contradict it. Written by the LLM from the
+    client's profile (Phase 7) or by a person; lockable against the LLM like
+    the sub-stage prompts. Without a row, the system's generic text applies."""
+
+    LLM, HUMAN = "llm", "human"
+    AUTHORS = [(LLM, "IA"), (HUMAN, "Pessoa")]
+
+    tenant = models.ForeignKey("Tenant", on_delete=models.CASCADE, related_name="stage_prompts")
+    stage = models.CharField("etapa", max_length=20, choices=Stage.choices)
+    prompt = models.TextField("prompt mestre")
+    prompt_by = models.CharField("escrito por", max_length=5, choices=AUTHORS, default=HUMAN)
+    prompt_locked = models.BooleanField("bloquear edição do prompt pela IA", default=False)
+    profile_version = models.PositiveIntegerField("versão do perfil usada", null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "prompt mestre da etapa"
+        verbose_name_plural = "prompts mestres das etapas"
+        constraints = [models.UniqueConstraint(fields=["tenant", "stage"], name="stage_prompt_unique")]
+
 
 class Substage(models.Model):
     """Sub-stage of one of the 6 fixed stages, per tenant (Phase 5).

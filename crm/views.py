@@ -345,6 +345,8 @@ def _funnel_context(tenant, error=""):
         active = sum(1 for s in items if s.is_active)
         stages.append((value, label, items, active, active < MAX_SUBSTAGES_PER_STAGE))
     profile = tenant.profile or {}
+    masters = funnel.stage_prompts(tenant)
+    stages = [(value, label, items, active, room, masters[value]) for value, label, items, active, room in stages]
     return {"stages": stages, "error": error, "tenant": tenant, "max_substages": MAX_SUBSTAGES_PER_STAGE,
             "profile": profile,
             "profile_url": f"{settings.CORE_API_URL.rstrip('/')}/clientes/{tenant.slug}/perfil/" if settings.CORE_API_URL else ""}
@@ -384,6 +386,18 @@ def substage_save(request):
     except IntegrityError:
         return _funnel_section(request, "Já existe uma subetapa com esse nome nesta etapa.")
     return toast(_funnel_section(request), "Subetapa salva.")
+
+
+@tenant_required
+@require_POST
+def stage_prompt_save(request):
+    """Master prompt of a stage, as a person (empty = back to the generic text)."""
+    try:
+        funnel.set_stage_prompt(request.tenant, request.POST.get("stage", ""), request.POST.get("prompt", ""),
+                                prompt_locked=request.POST.get("prompt_locked") == "on")
+    except funnel.FunnelError as exc:
+        return _funnel_section(request, str(exc))
+    return toast(_funnel_section(request), "Prompt mestre salvo.")
 
 
 @tenant_required
