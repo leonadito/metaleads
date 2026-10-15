@@ -390,6 +390,27 @@ def substage_save(request):
 
 @tenant_required
 @require_POST
+def ai_switch(request):
+    """Turn the AI on (profile complete; the LLM builds the funnel), ask for a
+    new build (after the profile changed), or turn it off."""
+    from .funnel_ai import build_funnel
+
+    action = request.POST.get("action")
+    tenant = request.tenant
+    if action == "off":
+        Tenant.objects.filter(pk=tenant.pk).update(ai_enabled_at=None)
+        return redirect("crm_funnel")
+    if not (tenant.profile or {}).get("ready_for_ai"):
+        return _funnel_section(request, "Para ligar a IA, o perfil do cliente precisa estar completo.")
+    if action == "on" and not tenant.ai_enabled_at:
+        Tenant.objects.filter(pk=tenant.pk).update(ai_enabled_at=timezone.now(), ai_last_error="")
+    if action in ("on", "rebuild"):
+        transaction.on_commit(lambda: build_funnel.enqueue(tenant.pk))
+    return redirect("crm_funnel")
+
+
+@tenant_required
+@require_POST
 def stage_prompt_save(request):
     """Master prompt of a stage, as a person (empty = back to the generic text)."""
     try:

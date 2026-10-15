@@ -21,5 +21,28 @@
   {% endif %}
   {% if profile_url %}<a href="{{ profile_url }}" class="mt-1 inline-block font-medium text-brand hover:underline">{% if profile.version %}Editar o perfil{% else %}Preencher o perfil{% endif %} no painel da Agitare</a>{% endif %}
 </section>
+<section class="mb-4 rounded-lg border border-gray-200 bg-white p-4 text-sm shadow-sm">
+  <h2 class="font-semibold">IA no CRM</h2>
+  {% if tenant.ai_enabled_at %}
+  <p>Ligada desde {{ tenant.ai_enabled_at|date:"d/m/Y H:i" }}.
+    {% if tenant.ai_funnel_built_at %}Funil montado pela IA em {{ tenant.ai_funnel_built_at|date:"d/m/Y H:i" }} (perfil versão {{ tenant.ai_funnel_profile_version }}).{% else %}Montando o funil a partir do perfil… recarregue em instantes.{% endif %}</p>
+  {% if tenant.ai_last_error %}<p class="mt-1 text-accent-text">Última tentativa falhou: {{ tenant.ai_last_error }}</p>{% endif %}
+  {% if tenant.ai_funnel_profile_version and profile.version and profile.version != tenant.ai_funnel_profile_version %}
+  <p class="mt-1 text-amber-800">O perfil mudou (agora versão {{ profile.version }}). Peça à IA para revisar o funil: ela só mexe nos prompts não bloqueados e só cria subetapas dentro do limite.</p>
+  {% endif %}
+  <div class="mt-2 flex flex-wrap gap-2">
+    <form method="post" action="{% url 'crm_ai_switch' %}">{% csrf_token %}<input type="hidden" name="action" value="rebuild">
+      <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-brand">Revisar o funil com a IA</button></form>
+    <form method="post" action="{% url 'crm_ai_switch' %}" onsubmit="return confirm('Desligar a IA deste cliente? O funil fica como está.')">{% csrf_token %}<input type="hidden" name="action" value="off">
+      <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-accent">Desligar</button></form>
+  </div>
+  {% elif profile.ready_for_ai %}
+  <p>Desligada. Ao ligar, a IA lê o perfil do cliente, escreve o prompt mestre de cada etapa e cria as subetapas (até 5 por etapa). Prompts bloqueados e subetapas que já existem são respeitados.</p>
+  <form method="post" action="{% url 'crm_ai_switch' %}" class="mt-2">{% csrf_token %}<input type="hidden" name="action" value="on">
+    <button class="rounded-md bg-brand px-3 py-1.5 font-medium text-white hover:bg-brand-dark">Ligar a IA e montar o funil</button></form>
+  {% else %}
+  <p class="text-gray-600">Desligada. Só dá para ligar com o perfil do cliente completo.</p>
+  {% endif %}
+</section>
 {% include "crm/_funnel.html" %}
 {% endblock %}

@@ -40,6 +40,12 @@ class Tenant(models.Model):
     # daily check): the base for the LLM to build the funnel (Phase 7).
     profile = models.JSONField("perfil do cliente", default=dict, blank=True)
     profile_version = models.PositiveIntegerField(default=0)
+    # AI in the CRM (Phase 7): turned on by a person once the profile is
+    # complete; the LLM then builds the funnel from the profile.
+    ai_enabled_at = models.DateTimeField("IA ligada em", null=True, blank=True)
+    ai_funnel_built_at = models.DateTimeField("funil montado pela IA em", null=True, blank=True)
+    ai_funnel_profile_version = models.PositiveIntegerField(null=True, blank=True)
+    ai_last_error = models.TextField(blank=True)
     # Outgoing messages (Phase 6, crm/messaging.py).
     chatwoot_inboxes = models.JSONField("inboxes do Chatwoot", default=list, blank=True)  # read from the core
     resend_window_days = models.PositiveIntegerField(
