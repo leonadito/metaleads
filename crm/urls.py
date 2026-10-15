@@ -27,6 +27,7 @@ urlpatterns = [
     path("crm/mensagens/limites/", messages_views.limits_save, name="crm_messages_limits"),
     path("crm/mensagens/inicial/", messages_views.initial_save, name="crm_initial_save"),
     path("crm/mensagens/bloqueio/", messages_views.suppression_add, name="crm_suppression_add"),
+    path("crm/mensagens/retomar-email/", messages_views.email_resume, name="crm_email_resume"),
     path("crm/mensagens/bloqueio/<int:pk>/remover/", messages_views.suppression_remove, name="crm_suppression_remove"),
     path("crm/mensagens/<uuid:message_uuid>/reenviar/", messages_views.message_resend, name="crm_message_resend"),
 ]

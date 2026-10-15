@@ -56,6 +56,13 @@ PRIORITY_ANSWER, PRIORITY_FIRST_CONTACT = 1, 5
 MAX_ATTEMPTS = 5
 WARMUP = [(7, 20), (14, 50), (21, 100)]  # (days since the mailbox's first e-mail, daily limit)
 QUEUE_PATH = "crm.messaging.process_queue"
+# Mailbox health (values to calibrate in the beta): over the last 7 days, at
+# least HEALTH_MIN_SENT e-mails and HEALTH_MAX_BOUNCE_RATE of them bounced,
+# or HEALTH_MAX_COMPLAINTS complaints, pause the tenant's automatic e-mail.
+HEALTH_WINDOW = timedelta(days=7)
+HEALTH_MIN_SENT = 20
+HEALTH_MAX_BOUNCE_RATE = 0.05
+HEALTH_MAX_COMPLAINTS = 3
 INITIAL_MAX_AGE = timedelta(hours=24)
 QUEUE_EVERY = timedelta(minutes=1)
 VARIABLES = ("nome", "primeiro_nome", "pagina", "formulario", "empresa")
@@ -424,7 +431,10 @@ def process_due(now=None, limit=50):
     now = now or timezone.now()
     done = 0
     due = (OutboundMessage.objects.select_related("tenant", "lead__contact", "lead__tenant")
-           .filter(status=OutboundMessage.QUEUED, send_after__lte=now).order_by("priority", "send_after", "id")[:limit])
+           .filter(status=OutboundMessage.QUEUED, send_after__lte=now)
+           # Paused e-mail waits in the queue until a person resumes it.
+           .exclude(channel=Channel.EMAIL, tenant__email_paused_at__isnull=False)
+           .order_by("priority", "send_after", "id")[:limit])
     for message in due:
         try:
             with transaction.atomic():
@@ -487,4 +497,62 @@ def record_bounce(tenant, content):
             LeadEvent.objects.create(lead=sent.lead, tenant=tenant, type=EventType.MESSAGE_SKIPPED, actor="sistema",
                                      reason=f"E-mail devolvido: {address} bloqueado para envios")
             found.append(address)
+    if found:
+        check_email_health(tenant)
     return found
+
+
+# ── Mailbox health: automatic pause ──────────────────────────────────────────
+
+def email_health(tenant, now=None):
+    now = now or timezone.now()
+    since = max(now - HEALTH_WINDOW, tenant.email_resumed_at or now - HEALTH_WINDOW)
+    sent = OutboundMessage.objects.filter(tenant=tenant, channel=Channel.EMAIL, status=OutboundMessage.SENT,
+                                          sent_at__gte=since).count()
+    marks = Suppression.objects.filter(tenant=tenant, created_at__gte=since)
+    return {"sent": sent, "bounces": marks.filter(reason=Suppression.BOUNCE).count(),
+            "complaints": marks.filter(reason=Suppression.COMPLAINT).count()}
+
+
+def check_email_health(tenant, now=None):
+    """Pauses the tenant's automatic e-mail when the mailbox looks unhealthy
+    and tells the agency. Returns the reason, or "" when healthy."""
+    if tenant.email_paused_at:
+        return tenant.email_pause_reason
+    h = email_health(tenant, now)
+    reason = ""
+    if h["sent"] >= HEALTH_MIN_SENT and h["bounces"] / h["sent"] >= HEALTH_MAX_BOUNCE_RATE:
+        reason = (f"{h['bounces']} de {h['sent']} e-mails voltaram nos últimos 7 dias "
+                  f"({100 * h['bounces'] // h['sent']}%, limite {int(HEALTH_MAX_BOUNCE_RATE * 100)}%).")
+    elif h["complaints"] >= HEALTH_MAX_COMPLAINTS:
+        reason = f"{h['complaints']} reclamações de destinatários nos últimos 7 dias (limite {HEALTH_MAX_COMPLAINTS})."
+    if reason:
+        Tenant.objects.filter(pk=tenant.pk).update(email_paused_at=now or timezone.now(), email_pause_reason=reason)
+        tenant.email_paused_at, tenant.email_pause_reason = now or timezone.now(), reason
+        pk = tenant.pk
+        transaction.on_commit(lambda: alert_agency.enqueue(pk, "Envio automático de e-mail pausado", (
+            f"O CRM pausou o envio automático de e-mail de {tenant.name}: {reason}\n\n"
+            "Todos os clientes da Agitare enviam pelo mesmo servidor; uma caixa com muitas devoluções ou reclamações "
+            "pode prejudicar a entrega de todos. Confira a lista de contatos e retome o envio na tela Mensagens do CRM. "
+            "As mensagens ficaram na fila, nada foi perdido.")))
+    return reason
+
+
+def resume_email(tenant):
+    Tenant.objects.filter(pk=tenant.pk).update(email_paused_at=None, email_pause_reason="", email_resumed_at=timezone.now())
+    transaction.on_commit(schedule_queue)
+
+
+@task
+def alert_agency(tenant_id, subject, body):
+    """The core knows who is responsible for the client and sends the e-mail."""
+    tenant = Tenant.objects.filter(pk=tenant_id).first()
+    if tenant is None or not settings.CORE_API_URL:
+        return "sem core"
+    response = requests.post(
+        f"{settings.CORE_API_URL.rstrip('/')}/api/v1/tenants/{tenant.uuid}/avisos",
+        json={"subject": subject, "body": body},
+        headers={"Authorization": f"Bearer {settings.CORE_WEBHOOK_SECRET}"}, timeout=20,
+    )
+    response.raise_for_status()
+    return response.json()

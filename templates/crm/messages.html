@@ -9,6 +9,15 @@
   </p>
 </div>
 {% if error %}<p class="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ error }}</p>{% endif %}
+{% if tenant.email_paused_at %}
+<section class="mb-6 rounded-lg border border-accent bg-red-50 p-4 text-sm" role="alert">
+  <p class="font-semibold text-accent-text">Envio automático de e-mail pausado desde {{ tenant.email_paused_at|date:"d/m/Y H:i" }}</p>
+  <p class="mt-1">{{ tenant.email_pause_reason }}</p>
+  <p class="mt-1 text-gray-700">{{ waiting_paused }} e-mail{{ waiting_paused|pluralize }} na fila, esperando. Confira a lista de contatos antes de retomar: os clientes da Agitare enviam pelo mesmo servidor.</p>
+  <form method="post" action="{% url 'crm_email_resume' %}" class="mt-3">{% csrf_token %}
+    <button type="submit" class="rounded-md bg-brand px-3 py-1.5 font-medium text-white hover:bg-brand-dark">Retomar envio de e-mail</button></form>
+</section>
+{% endif %}
 
 <div class="grid gap-6 xl:grid-cols-2">
   <div class="space-y-6">
@@ -33,6 +42,7 @@
           <input type="number" name="email_hourly_cap" min="1" max="500" value="{{ tenant.email_hourly_cap }}" class="mt-1 w-24 rounded-md border border-gray-300 px-2 py-1"></label>
         <label class="block">E-mails por dia
           <input type="number" name="email_daily_cap" min="1" max="5000" value="{{ tenant.email_daily_cap }}" class="mt-1 w-24 rounded-md border border-gray-300 px-2 py-1"></label>
+        <p class="text-xs text-gray-600 sm:col-span-3">Últimos 7 dias: {{ health.sent }} e-mail{{ health.sent|pluralize }} enviado{{ health.sent|pluralize }}, {{ health.bounces }} devolvido{{ health.bounces|pluralize }}, {{ health.complaints }} reclamaç{{ health.complaints|pluralize:"ão,ões" }}. Muitas devoluções ou reclamações pausam o envio sozinho.</p>
         <p class="text-xs text-gray-500 sm:col-span-3">Caixa nova começa devagar (20 por dia na 1ª semana, 50 na 2ª, 100 na 3ª) para não cair no spam. O que passa do limite espera na fila, nada é descartado.</p>
         <div class="sm:col-span-3"><button type="submit" class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-brand">Salvar limites</button></div>
       </form>
@@ -120,6 +130,7 @@
       <form method="post" action="{% url 'crm_suppression_add' %}" class="mb-3 flex gap-2 text-sm">
         {% csrf_token %}
         <input type="text" name="address" placeholder="E-mail ou telefone (+55…)" aria-label="E-mail ou telefone" required>
+        <select name="reason" aria-label="Motivo" class="!w-40"><option value="manual">Manual</option><option value="complaint">Reclamação</option></select>
         <button type="submit" class="shrink-0 rounded-md border border-gray-300 px-3 hover:border-brand">Bloquear</button>
       </form>
       <ul class="divide-y divide-gray-100 text-sm">

@@ -40,8 +40,11 @@ def _context(request, edit=None, error=""):
         "error": error,
         "queue": OutboundMessage.objects.filter(tenant=tenant).select_related("lead__contact")[:40],
         "suppressions": Suppression.objects.filter(tenant=tenant).order_by("-created_at")[:200],
-        "inboxes": messaging.inboxes(tenant),
+        "inboxes": messaging.inboxes(tenant, refresh=True),
         "variables": messaging.VARIABLES,
+        "health": messaging.email_health(tenant),
+        "waiting_paused": OutboundMessage.objects.filter(tenant=tenant, channel="email", status="queued").count()
+        if tenant.email_paused_at else 0,
     }
 
 
@@ -106,8 +109,18 @@ def initial_save(request):
 @require_POST
 def suppression_add(request):
     address = request.POST.get("address", "").strip().lower()[:255]
+    reason = request.POST.get("reason") if request.POST.get("reason") == Suppression.COMPLAINT else Suppression.MANUAL
     if address:
-        Suppression.objects.get_or_create(tenant=request.tenant, address=address, defaults={"reason": Suppression.MANUAL})
+        Suppression.objects.get_or_create(tenant=request.tenant, address=address, defaults={"reason": reason})
+        if reason == Suppression.COMPLAINT:
+            messaging.check_email_health(request.tenant)
+    return redirect("crm_messages")
+
+
+@tenant_required
+@require_POST
+def email_resume(request):
+    messaging.resume_email(request.tenant)
     return redirect("crm_messages")
 
 

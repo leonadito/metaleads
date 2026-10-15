@@ -48,6 +48,11 @@ class Tenant(models.Model):
     )
     email_hourly_cap = models.PositiveIntegerField("e-mails por hora", default=30)
     email_daily_cap = models.PositiveIntegerField("e-mails por dia (depois do aquecimento)", default=200)
+    # Automatic pause of the automatic e-mail when too many bounce or get
+    # complaints (all clients share the VPS's IP); a person resumes it.
+    email_paused_at = models.DateTimeField("envio de e-mail pausado em", null=True, blank=True)
+    email_pause_reason = models.TextField(blank=True)
+    email_resumed_at = models.DateTimeField(null=True, blank=True)
     waiting_alert_minutes = models.PositiveIntegerField(
         "tempo de aviso (min)", default=15,
         help_text="Mensagem do lead sem resposta de atendente por mais que isso gera aviso no Chatwoot.",

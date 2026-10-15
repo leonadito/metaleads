@@ -5,6 +5,7 @@ from unittest import mock
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from django_tasks_db.models import DBTaskResult
 
 from leads.models import UserProfile
 
@@ -320,3 +321,52 @@ class MessagesScreenTests(TestCase):
         self.assertEqual((s.address, s.reason), ("spam@x.com", "manual"))
         self.client.post(f"/crm/mensagens/bloqueio/{s.pk}/remover/")
         self.assertFalse(Suppression.objects.exists())
+
+
+class EmailPauseTests(MessagingTestBase):
+    def sent_emails(self, n):
+        lead = self.form_lead(email="base@x.com", phone="51900001111")
+        now = timezone.now()
+        for i in range(n):
+            OutboundMessage.objects.create(tenant=self.tenant, lead=lead, kind="initial", channel=Channel.EMAIL, inbox_id=3,
+                                           status="sent", sent_at=now - timedelta(hours=i % 48), send_after=now)
+
+    def test_too_many_bounces_pause_and_alert_the_agency(self):
+        self.sent_emails(19)
+        for i in range(1):
+            Suppression.objects.create(tenant=self.tenant, address=f"b{i}@x.com", reason="bounce")
+        self.assertEqual(messaging.check_email_health(self.tenant), "")  # fewer than 20 sent: no decision
+        self.sent_emails(1)
+        with self.captureOnCommitCallbacks(execute=True):
+            reason = messaging.check_email_health(self.tenant)
+        self.assertIn("1 de 20 e-mails voltaram", reason)
+        self.tenant.refresh_from_db()
+        self.assertIsNotNone(self.tenant.email_paused_at)
+        alert = DBTaskResult.objects.get(task_path="crm.messaging.alert_agency")
+        self.assertEqual(alert.args_kwargs["args"][1], "Envio automático de e-mail pausado")
+        with mock.patch("crm.messaging.requests.post", return_value=mock.Mock(status_code=200, json=lambda: {"recipients": 2},
+                                                                               raise_for_status=lambda: None)) as post:
+            messaging.alert_agency.call(*alert.args_kwargs["args"])
+        self.assertTrue(post.call_args.args[0].endswith(f"/api/v1/tenants/{self.tenant.uuid}/avisos"))
+
+    def test_paused_email_waits_and_resumes(self):
+        lead = self.form_lead()
+        self.plan(lead)
+        Tenant.objects.filter(pk=self.tenant.pk).update(email_paused_at=timezone.now(), email_pause_reason="teste")
+        self.assertEqual(messaging.process_due(), 0)  # the e-mail waits while paused
+        email = OutboundMessage.objects.get(lead=lead, channel=Channel.EMAIL)
+        self.assertEqual(email.status, "queued")
+        self.tenant.refresh_from_db()
+        messaging.resume_email(self.tenant)
+        self.tenant.refresh_from_db()
+        self.assertIsNone(self.tenant.email_paused_at)
+        messaging.process_due()
+        email.refresh_from_db()
+        self.assertEqual(email.status, "sent")
+        # After resuming, the count starts again from there.
+        self.assertEqual(messaging.email_health(self.tenant)["sent"], 1)
+
+    def test_complaints_pause_too(self):
+        for i in range(3):
+            Suppression.objects.create(tenant=self.tenant, address=f"c{i}@x.com", reason="complaint")
+        self.assertIn("3 reclamações", messaging.check_email_health(self.tenant))
