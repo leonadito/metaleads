@@ -2,7 +2,7 @@
 and the approval of the SDR agent's drafts."""
 from urllib.parse import urlencode
 
-from django.http import Http404
+from django.http import FileResponse, Http404
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
@@ -52,6 +52,9 @@ def document_add(request):
             doc.source = upload.name[:500]
             doc.text = rag.extract_file(upload.name, upload.read())
             doc.title = title or upload.name.rsplit(".", 1)[0][:200]
+            doc.content_type = (upload.content_type or "application/octet-stream")[:100]
+            upload.seek(0)
+            doc.file.save(upload.name, upload, save=False)
         elif kind == KnowledgeDocument.Kind.URL:
             url = request.POST.get("url", "").strip()
             rag.check_public_url(url)
@@ -101,8 +104,20 @@ def document_toggle(request, doc_uuid):
 def document_delete(request, doc_uuid):
     doc = _document(request, doc_uuid)
     title = doc.title
+    if doc.file:
+        doc.file.delete(save=False)
     doc.delete()
     return _back(ok=f"“{title}” apagado.")
+
+
+@tenant_required
+def document_file(request, doc_uuid):
+    """The original file, only to people logged in to the client."""
+    doc = _document(request, doc_uuid)
+    if not doc.file:
+        raise Http404
+    return FileResponse(doc.file.open("rb"), as_attachment=True, filename=doc.source or "documento",
+                        content_type=doc.content_type or "application/octet-stream")
 
 
 @tenant_required

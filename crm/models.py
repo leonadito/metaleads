@@ -688,10 +688,15 @@ class TrackedLink(models.Model):
     clicks = models.PositiveIntegerField(default=0)
 
 
+def _document_file_path(document, filename):
+    return f"documentos/{document.tenant.uuid}/{document.uuid}/{filename[-150:]}"
+
+
 class KnowledgeDocument(models.Model):
     """A document of the client's master RAG (Phase 7): products, services,
-    prices, policies. Only the extracted text is kept, split into chunks
-    with their embeddings (crm.rag); the original file is not stored."""
+    prices, policies. The extracted text is split into chunks with their
+    embeddings (crm.rag); an uploaded file's original is kept in the private
+    storage (Cloudflare R2, decision of 2026-10-16)."""
 
     class Kind(models.TextChoices):
         FILE = "file", "Arquivo"
@@ -708,6 +713,8 @@ class KnowledgeDocument(models.Model):
     title = models.CharField("título", max_length=200)
     kind = models.CharField(max_length=10, choices=Kind.choices)
     source = models.CharField("arquivo ou endereço", max_length=500, blank=True)
+    file = models.FileField("arquivo original", upload_to=_document_file_path, max_length=300, blank=True)
+    content_type = models.CharField(max_length=100, blank=True)
     text = models.TextField("texto extraído", blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
     error = models.TextField(blank=True)

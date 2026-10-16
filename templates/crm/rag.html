@@ -6,7 +6,7 @@
   <p class="max-w-3xl text-sm text-gray-600">
     Catálogos, tabelas de preço, regras e perguntas frequentes deste cliente. A IA consulta estes documentos antes de
     responder um lead e nunca informa preço, condição ou prazo que não esteja aqui ou no perfil do cliente.
-    Fica guardado só o texto; o arquivo original não é armazenado.
+    O arquivo original fica guardado num armazenamento privado e só abre para quem tem acesso a este cliente.
   </p>
 </div>
 {% if ok %}<p class="mb-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">{{ ok }}</p>{% endif %}
@@ -21,7 +21,7 @@
       <li class="flex flex-wrap items-start justify-between gap-3 py-3">
         <div class="min-w-0">
           <p class="font-medium {% if not d.is_active %}text-gray-400 line-through{% endif %}">{{ d.title|default:d.source }}</p>
-          <p class="text-gray-500">{{ d.get_kind_display }}{% if d.source and d.kind != 'text' %} · <span class="break-all">{{ d.source|truncatechars:80 }}</span>{% endif %}</p>
+          <p class="text-gray-500">{{ d.get_kind_display }}{% if d.source and d.kind != 'text' %} · {% if d.file %}<a href="{% url 'crm_document_file' d.uuid %}" class="break-all text-brand hover:underline">{{ d.source|truncatechars:80 }}</a>{% else %}<span class="break-all">{{ d.source|truncatechars:80 }}</span>{% endif %}{% endif %}</p>
           <p class="text-xs {% if d.status == 'error' %}text-accent-text{% elif d.status == 'pending' %}text-brand{% else %}text-gray-500{% endif %}">
             {{ d.get_status_display }}{% if d.status == 'ready' %} · {{ d.chunk_count }} trecho{{ d.chunk_count|pluralize }} · {{ d.text|length }} caracteres · {{ d.indexed_at|date:"d/m/Y H:i" }}{% endif %}
             {% if d.error %} · {{ d.error }}{% endif %}

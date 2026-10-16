@@ -18,3 +18,5 @@ phonenumbers==9.0.41
 django-tasks-db[compat]==0.13.0
 pypdf==5.4.0
 python-docx==1.1.2
+django-storages[s3]==1.14.6
+boto3==1.43.114

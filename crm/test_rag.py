@@ -154,3 +154,40 @@ class RagScreenTests(TestCase):
         page = self.client.get("/crm/ia/documentos/")
         self.assertContains(page, "Regras")
         self.assertNotContains(page, "Alheio")
+
+
+class RagOriginalFileTests(TestCase):
+    def setUp(self):
+        import tempfile
+
+        self.media = tempfile.mkdtemp()
+        self.override = override_settings(MEDIA_ROOT=self.media, CORE_API_URL="https://core.example",
+                                          CORE_WEBHOOK_SECRET="seg")
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        import shutil
+
+        self.addCleanup(shutil.rmtree, self.media, True)
+        self.tenant = Tenant.objects.create(uuid=uuid.uuid4(), name="Alto", slug="alto")
+        user = User.objects.create_user(username="dona")
+        UserProfile.objects.create(user=user, core_client_uuid=self.tenant.uuid)
+        self.client.force_login(user)
+
+    def test_original_is_kept_downloaded_by_the_tenant_and_deleted_with_the_document(self):
+        content = "Tabela: diária R$ 300, pet R$ 50.".encode()
+        self.client.post("/crm/ia/documentos/novo/", {"kind": "file", "file": SimpleUploadedFile("tabela.txt", content, "text/plain")})
+        doc = KnowledgeDocument.objects.get()
+        self.assertTrue(doc.file.name.startswith(f"documentos/{self.tenant.uuid}/{doc.uuid}/"))
+        r = self.client.get(f"/crm/ia/documentos/{doc.uuid}/arquivo/")
+        self.assertEqual(b"".join(r.streaming_content), content)
+        self.assertIn('filename="tabela.txt"', r["Content-Disposition"])
+        r.close()
+        self.assertContains(self.client.get("/crm/ia/documentos/"), f"/crm/ia/documentos/{doc.uuid}/arquivo/")
+        self.client.logout()
+        self.assertEqual(self.client.get(f"/crm/ia/documentos/{doc.uuid}/arquivo/").status_code, 302)  # login first
+        self.client.force_login(User.objects.get(username="dona"))
+        path = doc.file.path
+        self.client.post(f"/crm/ia/documentos/{doc.uuid}/apagar/")
+        import os
+
+        self.assertFalse(os.path.exists(path))

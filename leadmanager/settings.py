@@ -94,6 +94,34 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 if config('SERVE_STATIC', default=False, cast=bool):
     MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 
+# Uploaded files (originals of the AI's documents). Every file of the apps
+# lives in Cloudflare R2 (decision of 2026-10-16): with R2_BUCKET set, in the
+# private bucket under the R2_PREFIX folder, served only through logged-in
+# views; without it (tests, local), on disk.
+MEDIA_ROOT = config('MEDIA_ROOT', default=str(BASE_DIR / 'media'))
+MEDIA_URL = '/arquivos-internos/'  # never routed
+R2_BUCKET = config('R2_BUCKET', default='')
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
+if R2_BUCKET:
+    STORAGES['default'] = {
+        'BACKEND': 'storages.backends.s3.S3Storage',
+        'OPTIONS': {
+            'bucket_name': R2_BUCKET,
+            'endpoint_url': config('R2_ENDPOINT'),
+            'access_key': config('R2_ACCESS_KEY_ID'),
+            'secret_key': config('R2_SECRET_ACCESS_KEY'),
+            'region_name': 'auto',
+            'signature_version': 's3v4',
+            'location': config('R2_PREFIX', default='metaleads'),
+            'default_acl': None,
+            'file_overwrite': False,
+            'querystring_expire': 300,
+        },
+    }
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOGIN_URL = '/login/'

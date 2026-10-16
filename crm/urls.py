@@ -31,6 +31,7 @@ urlpatterns = [
     path("crm/ia/documentos/<uuid:doc_uuid>/reindexar/", rag_views.document_reindex, name="crm_document_reindex"),
     path("crm/ia/documentos/<uuid:doc_uuid>/uso/", rag_views.document_toggle, name="crm_document_toggle"),
     path("crm/ia/documentos/<uuid:doc_uuid>/apagar/", rag_views.document_delete, name="crm_document_delete"),
+    path("crm/ia/documentos/<uuid:doc_uuid>/arquivo/", rag_views.document_file, name="crm_document_file"),
     path("crm/mensagens/limites/", messages_views.limits_save, name="crm_messages_limits"),
     path("crm/mensagens/inicial/", messages_views.initial_save, name="crm_initial_save"),
     path("crm/mensagens/bloqueio/", messages_views.suppression_add, name="crm_suppression_add"),
