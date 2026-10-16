@@ -99,3 +99,11 @@ class SummaryTests(TestCase):
         self.assertContains(r, "Resumo da IA")
         self.assertContains(r, "Apartamento de 3 quartos")
         self.assertContains(r, "#12")
+
+    def test_situation_field_and_what_the_company_said(self):
+        self.assertEqual(list(summary.FIELDS)[0], "situacao")
+        text, facts = summary.clean({"resumo": "Desistiu.", "fatos": [
+            {"campo": "situacao", "texto": "Fechou com outra academia, mais barata", "mensagens": [12]}]}, {12})
+        self.assertEqual(facts[0]["campo"], "situacao")
+        self.assertIn("não é dado do lead", summary.SYSTEM)
+        self.assertIn("só o que os dois lados confirmaram", summary.SYSTEM)
