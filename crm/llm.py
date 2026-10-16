@@ -36,6 +36,25 @@ def call(tenant, task, request, timeout=180):
     return data
 
 
+def embed(tenant, texts, timeout=120):
+    """Embeddings of texts (RAG) through the core: {"model", "vectors", "usage"}."""
+    response = requests.post(
+        f"{settings.CORE_API_URL.rstrip('/')}/api/v1/llm/embeddings",
+        json={"tenant": str(tenant.uuid), "input": texts},
+        headers={"Authorization": f"Bearer {settings.CORE_WEBHOOK_SECRET}"},
+        timeout=timeout,
+    )
+    try:
+        data = response.json()
+    except ValueError:
+        data = {"error": response.text[:300]}
+    if response.status_code == 429:
+        raise QuotaExhausted(data.get("error") or "cota de IA esgotada")
+    if response.status_code != 200:
+        raise LLMError(f"IA indisponível (HTTP {response.status_code}): {data.get('error', '')}"[:500])
+    return data
+
+
 def text_of(answer):
     """The answer's text (thinking blocks, if any, come first)."""
     return "".join(b.get("text", "") for b in answer.get("content", []) if b.get("type") == "text")

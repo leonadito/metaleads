@@ -15,6 +15,8 @@ import uuid
 from django.db import models
 from django.db.models import Q
 
+from .vector import VectorField
+
 
 class Tenant(models.Model):
     """Minimal copy of a client (tenant) of the Agitare Core, kept in sync by
@@ -680,3 +682,56 @@ class TrackedLink(models.Model):
     message = models.ForeignKey(OutboundMessage, on_delete=models.CASCADE, related_name="links")
     url = models.URLField(max_length=2000)
     clicks = models.PositiveIntegerField(default=0)
+
+
+class KnowledgeDocument(models.Model):
+    """A document of the client's master RAG (Phase 7): products, services,
+    prices, policies. Only the extracted text is kept, split into chunks
+    with their embeddings (crm.rag); the original file is not stored."""
+
+    class Kind(models.TextChoices):
+        FILE = "file", "Arquivo"
+        URL = "url", "Página da web"
+        TEXT = "text", "Texto"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Na fila"
+        READY = "ready", "Pronto"
+        ERROR = "error", "Erro"
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="documents")
+    title = models.CharField("título", max_length=200)
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    source = models.CharField("arquivo ou endereço", max_length=500, blank=True)
+    text = models.TextField("texto extraído", blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    error = models.TextField(blank=True)
+    is_active = models.BooleanField("em uso pela IA", default=True)
+    chunk_count = models.PositiveIntegerField(default=0)
+    embedding_model = models.CharField(max_length=120, blank=True)
+    tokens = models.PositiveIntegerField("tokens indexados", default=0)
+    created_by = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    indexed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
+
+
+class KnowledgeChunk(models.Model):
+    """A piece of a document with its embedding (pgvector)."""
+
+    document = models.ForeignKey(KnowledgeDocument, on_delete=models.CASCADE, related_name="chunks")
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="knowledge_chunks")
+    order = models.PositiveIntegerField()
+    text = models.TextField()
+    embedding = VectorField(null=True)
+
+    class Meta:
+        ordering = ["document", "order"]
+        indexes = [models.Index(fields=["tenant"])]

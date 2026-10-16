@@ -1,0 +1,92 @@
+{% extends "crm/base.html" %}
+{% block title %}Documentos da IA{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <h1 class="text-xl font-semibold text-brand">Documentos da IA</h1>
+  <p class="max-w-3xl text-sm text-gray-600">
+    Catálogos, tabelas de preço, regras e perguntas frequentes deste cliente. A IA consulta estes documentos antes de
+    responder um lead e nunca informa preço, condição ou prazo que não esteja aqui ou no perfil do cliente.
+    Fica guardado só o texto; o arquivo original não é armazenado.
+  </p>
+</div>
+{% if ok %}<p class="mb-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">{{ ok }}</p>{% endif %}
+{% if error %}<p class="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ error }}</p>{% endif %}
+
+<div class="grid gap-6 xl:grid-cols-[1fr_24rem]">
+  <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <h2 class="mb-3 font-semibold">Documentos</h2>
+    {% if documents %}
+    <ul class="divide-y divide-gray-100 text-sm">
+      {% for d in documents %}
+      <li class="flex flex-wrap items-start justify-between gap-3 py-3">
+        <div class="min-w-0">
+          <p class="font-medium {% if not d.is_active %}text-gray-400 line-through{% endif %}">{{ d.title|default:d.source }}</p>
+          <p class="text-gray-500">{{ d.get_kind_display }}{% if d.source and d.kind != 'text' %} · <span class="break-all">{{ d.source|truncatechars:80 }}</span>{% endif %}</p>
+          <p class="text-xs {% if d.status == 'error' %}text-accent-text{% elif d.status == 'pending' %}text-brand{% else %}text-gray-500{% endif %}">
+            {{ d.get_status_display }}{% if d.status == 'ready' %} · {{ d.chunk_count }} trecho{{ d.chunk_count|pluralize }} · {{ d.text|length }} caracteres · {{ d.indexed_at|date:"d/m/Y H:i" }}{% endif %}
+            {% if d.error %} · {{ d.error }}{% endif %}
+          </p>
+        </div>
+        <div class="flex shrink-0 gap-2">
+          <form method="post" action="{% url 'crm_document_reindex' d.uuid %}">{% csrf_token %}<button class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:border-brand">Reindexar</button></form>
+          <form method="post" action="{% url 'crm_document_toggle' d.uuid %}">{% csrf_token %}<button class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:border-brand">{% if d.is_active %}Tirar do uso{% else %}Usar{% endif %}</button></form>
+          <form method="post" action="{% url 'crm_document_delete' d.uuid %}" onsubmit="return confirm('Apagar este documento?')">{% csrf_token %}<button class="rounded-md border border-gray-300 px-2 py-1 text-xs text-accent-text hover:border-accent">Apagar</button></form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-gray-600">Nenhum documento ainda. Sem documentos, a IA responde só com o perfil do cliente e passa para a equipe o que não souber.</p>
+    {% endif %}
+
+    <h2 class="mb-2 mt-6 font-semibold">Testar a busca</h2>
+    <form method="get" class="flex gap-2 text-sm">
+      <input type="text" name="q" value="{{ query }}" placeholder="Ex.: tem vaga de garagem?" aria-label="Pergunta de teste">
+      <button class="shrink-0 rounded-md bg-brand px-3 py-1.5 font-medium text-white hover:bg-brand-dark">Buscar</button>
+    </form>
+    {% if search_error %}<p class="mt-2 text-sm text-accent-text">{{ search_error }}</p>{% endif %}
+    {% if found %}
+    {% if found.stale %}<p class="mt-2 text-sm text-amber-800">{{ found.stale }} documento{{ found.stale|pluralize }} indexado{{ found.stale|pluralize }} com outro modelo de embeddings: reindexe para entrar na busca.</p>{% endif %}
+    <ol class="mt-3 space-y-3 text-sm">
+      {% for r in found.results %}
+      <li class="rounded-md bg-gray-50 p-3"><p class="text-xs text-gray-500">{{ r.document }} · semelhança {{ r.score }}</p>
+        <p class="mt-1 whitespace-pre-line">{{ r.text|truncatechars:700 }}</p></li>
+      {% empty %}
+      <li class="text-gray-600">Nenhum trecho encontrado.</li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+  </section>
+
+  <aside class="space-y-6">
+    <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="mb-3 font-semibold">Enviar arquivo</h2>
+      <form method="post" action="{% url 'crm_document_add' %}" enctype="multipart/form-data" class="space-y-2 text-sm">{% csrf_token %}
+        <input type="hidden" name="kind" value="file">
+        <input type="file" name="file" accept=".pdf,.docx,.txt,.md" required aria-label="Arquivo">
+        <input type="text" name="title" placeholder="Título (opcional)" aria-label="Título">
+        <p class="text-xs text-gray-500">PDF com texto, DOCX, TXT ou MD, até {{ max_mb }} MB.</p>
+        <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-brand">Enviar</button>
+      </form>
+    </section>
+    <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="mb-3 font-semibold">Página da web</h2>
+      <form method="post" action="{% url 'crm_document_add' %}" class="space-y-2 text-sm">{% csrf_token %}
+        <input type="hidden" name="kind" value="url">
+        <input type="url" name="url" placeholder="https://..." required aria-label="Endereço da página">
+        <input type="text" name="title" placeholder="Título (opcional)" aria-label="Título">
+        <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-brand">Adicionar</button>
+      </form>
+    </section>
+    <section class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="mb-3 font-semibold">Colar texto</h2>
+      <form method="post" action="{% url 'crm_document_add' %}" class="space-y-2 text-sm">{% csrf_token %}
+        <input type="hidden" name="kind" value="text">
+        <input type="text" name="title" placeholder="Título" required aria-label="Título">
+        <textarea name="text" rows="6" required placeholder="Ex.: tabela de preços, regras de reserva, perguntas frequentes" aria-label="Texto"></textarea>
+        <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-brand">Salvar</button>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}

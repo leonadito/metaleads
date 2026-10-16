@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import api, chatwoot, core_sync, google_ads, messages_views, meta, tracking, views
+from . import api, chatwoot, core_sync, google_ads, messages_views, meta, rag_views, tracking, views
 
 urlpatterns = [
     path("api/v1/leads", api.create_lead, name="api_create_lead"),
@@ -25,6 +25,11 @@ urlpatterns = [
     path("crm/funil/prompt-mestre/", views.stage_prompt_save, name="crm_stage_prompt_save"),
     path("crm/funil/ia/", views.ai_switch, name="crm_ai_switch"),
     path("crm/mensagens/", messages_views.messages_page, name="crm_messages"),
+    path("crm/ia/documentos/", rag_views.documents_page, name="crm_documents"),
+    path("crm/ia/documentos/novo/", rag_views.document_add, name="crm_document_add"),
+    path("crm/ia/documentos/<uuid:doc_uuid>/reindexar/", rag_views.document_reindex, name="crm_document_reindex"),
+    path("crm/ia/documentos/<uuid:doc_uuid>/uso/", rag_views.document_toggle, name="crm_document_toggle"),
+    path("crm/ia/documentos/<uuid:doc_uuid>/apagar/", rag_views.document_delete, name="crm_document_delete"),
     path("crm/mensagens/limites/", messages_views.limits_save, name="crm_messages_limits"),
     path("crm/mensagens/inicial/", messages_views.initial_save, name="crm_initial_save"),
     path("crm/mensagens/bloqueio/", messages_views.suppression_add, name="crm_suppression_add"),
