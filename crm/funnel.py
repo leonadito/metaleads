@@ -144,6 +144,13 @@ def move(lead, stage=None, substage=None, *, actor, reason="", by=HUMAN):
     return MoveResult("moved", lead, f"Movido para {_label(stage, substage)}.")
 
 
+def send_to_review(lead, reason, actor, data=None):
+    """Freezes the lead for human review (also used by the AI routing)."""
+    with transaction.atomic():
+        lead = Lead.objects.select_for_update(of=("self",)).select_related("tenant").get(pk=lead.pk)
+        return _send_to_review(lead, reason, actor, data or {})
+
+
 def release(lead, *, actor, reason=""):
     """A person takes the lead out of review without moving it."""
     with transaction.atomic():

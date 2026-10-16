@@ -189,7 +189,7 @@ def _whatsapp_url(phone):
 EVENT_COLORS = {
     EventType.CREATED: "bg-sky-500", EventType.REENTRY: "bg-sky-300", EventType.STAGE_CHANGED: "bg-brand",
     EventType.MESSAGE: "bg-emerald-400", EventType.NOTE: "bg-amber-400",
-    EventType.REVIEW: "bg-accent", EventType.RELEASED: "bg-accent",
+    EventType.REVIEW: "bg-accent", EventType.RELEASED: "bg-accent", EventType.AI_DECISION: "bg-indigo-400",
     EventType.MESSAGE_SENT: "bg-emerald-600", EventType.MESSAGE_SKIPPED: "bg-gray-400",
     EventType.UNSUBSCRIBED: "bg-accent",
     EventType.EMAIL_OPENED: "bg-gray-400", EventType.EMAIL_CLICKED: "bg-gray-400",
@@ -213,6 +213,10 @@ def _history(lead):
                 text += " (automático)"
         elif e.type in (EventType.CREATED, EventType.REENTRY):
             text = f"{e.get_type_display()} por {sources.get(d.get('source'), d.get('source') or '')}"
+        elif e.type == EventType.AI_DECISION:
+            dec = d.get("decision") or {}
+            conf = dec.get("confianca")
+            text = f"IA: {d.get('outcome', '')}" + (f" (confiança {float(conf):.2f})" if isinstance(conf, (int, float)) else "")
         elif e.type == EventType.MESSAGE:
             text = "Mensagem do contato" if d.get("direction") == "incoming" else "Resposta do atendimento"
         else:

@@ -343,6 +343,7 @@ class EventType(models.TextChoices):
     MESSAGE_SKIPPED = "message_skipped", "Mensagem não enviada"
     UNSUBSCRIBED = "unsubscribed", "Descadastro"
     REVIEW = "review", "Revisão humana"
+    AI_DECISION = "ai_decision", "Decisão da IA"
     RELEASED = "released", "Liberado da revisão"
 
 

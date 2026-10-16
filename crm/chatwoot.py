@@ -34,7 +34,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django_tasks import task
 
-from . import chatwoot_actions, messaging
+from . import chatwoot_actions, messaging, routing
 from .ingest import IngestError, ingest
 from .models import EventType, Lead, LeadEvent, Source, Tenant
 
@@ -203,6 +203,8 @@ def process_message(tenant_id, payload, attempt=0):
         chatwoot_actions.message_seen(
             lead, MESSAGE_TYPES[mtype], sender.get("type") or ("contact" if mtype == INCOMING else ""),
         )
+        if mtype == INCOMING:
+            routing.schedule(lead)  # the AI decides where the lead belongs (Phase 7)
         LeadEvent.objects.create(
             lead=lead,
             tenant=tenant,
