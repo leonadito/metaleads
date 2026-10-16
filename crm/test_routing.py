@@ -53,6 +53,8 @@ class RoutingTests(TestCase):
         self.assertEqual((moved.actor, moved.data["by"], moved.reason), ("IA", "auto", "Agendou visita"))
         ai = LeadEvent.objects.get(lead=self.lead, type=EventType.AI_DECISION)
         self.assertEqual((ai.data["outcome"], ai.data["attempts"], ai.data["tokens"]), ("moveu", 1, 500))
+        self.assertEqual((ai.data["self_review"], ai.data["truncated"]), ([], False))
+        self.assertTrue(DBTaskResult.objects.filter(task_path="crm.summary.summarize_lead").exists())
         tenant_arg, task, request = call.call_args.args
         self.assertEqual(task, "sdr")
         user_parts = [p["text"] for p in request["messages"][0]["content"]]
@@ -75,14 +77,45 @@ class RoutingTests(TestCase):
         self.assertEqual((outcome, call.call_count), ("revisão (destino inválido)", 3))
         self.assertIsNotNone(self.lead.frozen_at)
 
-    def test_low_confidence_and_critical_stages_go_to_review(self):
-        outcome, _ = self.route(answer(decision(confianca=0.5)))
-        self.assertEqual(outcome, "revisão (confiança baixa)")
+    def test_low_confidence_goes_to_review_without_self_review(self):
+        outcome, call = self.route(answer(decision(confianca=0.5)))
+        self.assertEqual((outcome, call.call_count), ("revisão (confiança baixa)", 1))
         self.assertIn("Confiança baixa (0.50)", self.lead.review_reason)
         funnel.release(self.lead, actor="ana")
-        outcome, _ = self.route(answer(decision(etapa="convertido", subetapa="")))
-        self.assertEqual(outcome, "revisão (decisão crítica)")
+        outcome, call = self.route(answer(decision(etapa="perdido", subetapa="", confianca=0.4)))
+        self.assertEqual((outcome, call.call_count, self.lead.stage), ("revisão (confiança baixa)", 1, Stage.CRIADO))
+
+    def test_critical_move_applied_when_the_self_review_approves(self):
+        Lead.objects.filter(pk=self.lead.pk).update(summary_facts=[
+            {"campo": "interesse", "texto": "Quer apartamento de 3 quartos", "mensagens": [1]},
+            {"campo": "combinado", "texto": "Fechou a compra", "mensagens": [3]}])
+        self.lead.refresh_from_db()
+        approved = answer({"aprovada": True, "objecao": "", "fatos_divergentes": [2]}, tokens=300)
+        outcome, call = self.route(answer(decision(etapa="convertido", subetapa="", motivo="Fechou")), approved)
+        self.assertEqual((outcome, call.call_count, self.lead.stage), ("moveu", 2, Stage.CONVERTIDO))
+        review = call.call_args_list[1].args[2]
+        facts = review["messages"][0]["content"][1]["text"]
+        self.assertIn("2. [combinado] Fechou a compra\n   origem: #3: Sábado às 10h", facts)
+        self.assertIn("#3 [lead] Sábado às 10h", review["messages"][0]["content"][2]["text"])
+        ai = LeadEvent.objects.get(lead=self.lead, type=EventType.AI_DECISION)
+        self.assertEqual((ai.data["tokens"], ai.data["self_review"][0]["aprovada"], ai.data["divergent_facts"]), (800, True, 1))
+        # the fact that did not match its source is dropped and the summary is rebuilt next time
+        self.assertEqual([f["texto"] for f in self.lead.summary_facts], ["Quer apartamento de 3 quartos"])
+        self.assertEqual(self.lead.summary_position, "")
+
+    def test_critical_move_rejected_goes_back_then_to_review(self):
+        rejected = answer({"aprovada": False, "objecao": "O lead só pediu uma visita, não comprou.", "fatos_divergentes": []})
+        lost = answer(decision(etapa="convertido", subetapa="", motivo="Comprou"))
+        outcome, call = self.route(lost, rejected, lost, rejected, lost, rejected)
+        self.assertEqual((outcome, call.call_count), ("revisão (autocrítica reprovou)", 6))
+        retry = call.call_args_list[2].args[2]["messages"][-1]["content"]
+        self.assertIn("a revisão reprovou a decisão: O lead só pediu uma visita", retry)
+        self.assertIn("A autocrítica reprovou a decisão em 3 tentativas", self.lead.review_reason)
         self.assertEqual(self.lead.stage, Stage.CRIADO)
+        # a rejection followed by a better decision is applied
+        funnel.release(self.lead, actor="ana")
+        outcome, call = self.route(lost, rejected, answer(decision()))
+        self.assertEqual((outcome, call.call_count, self.lead.substage), ("moveu", 3, self.visita))
 
     def test_creates_a_sub_stage_when_none_fits(self):
         outcome, _ = self.route(answer(decision(acao="criar_subetapa", etapa="qualificado", subetapa="Aguardando aprovação do banco",
@@ -106,7 +139,8 @@ class RoutingTests(TestCase):
     def test_not_routed_when_frozen_or_ai_off(self):
         Lead.objects.filter(pk=self.lead.pk).update(frozen_at=timezone.now())
         outcome, call = self.route()
-        self.assertEqual((outcome, call.call_count), ("não roteado", 0))
+        self.assertEqual((outcome, call.call_count), ("em revisão: só o resumo", 0))
+        self.assertTrue(DBTaskResult.objects.filter(task_path="crm.summary.summarize_lead").exists())
         Lead.objects.filter(pk=self.lead.pk).update(frozen_at=None)
         Tenant.objects.filter(pk=self.tenant.pk).update(ai_enabled_at=None)
         self.assertEqual(self.route()[0], "não roteado")

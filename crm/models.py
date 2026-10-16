@@ -255,6 +255,13 @@ class Lead(models.Model):
     landing_page_url = models.URLField(max_length=500, blank=True)
     conversation_id = models.PositiveIntegerField("conversa no Chatwoot", null=True, blank=True)
     summary = models.TextField("resumo da IA", blank=True)
+    # Facts of the summary, each with the Chatwoot message ids it came from
+    # (crm.summary); only the latest version is kept.
+    summary_facts = models.JSONField("fatos do resumo", default=list, blank=True)
+    summary_message_id = models.PositiveBigIntegerField("última mensagem resumida", null=True, blank=True)
+    summary_since_rebuild = models.PositiveIntegerField(default=0)
+    summary_position = models.CharField("posição no último resumo refeito", max_length=40, blank=True)
+    summary_updated_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -19,7 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from . import chatwoot_actions, funnel
+from . import chatwoot_actions, funnel, summary
 from .ingest import IngestError, ingest
 from .models import CLOSED_STAGES, EventType, Lead, LeadAttribution, LeadEvent, Source, Stage, Substage, Tenant
 
@@ -217,6 +217,8 @@ def _history(lead):
             dec = d.get("decision") or {}
             conf = dec.get("confianca")
             text = f"IA: {d.get('outcome', '')}" + (f" (confiança {float(conf):.2f})" if isinstance(conf, (int, float)) else "")
+            if d.get("self_review"):
+                text += " · autocrítica " + ("aprovou" if d["self_review"][-1].get("aprovada") else "reprovou")
         elif e.type == EventType.MESSAGE:
             text = "Mensagem do contato" if d.get("direction") == "incoming" else "Resposta do atendimento"
         else:
@@ -254,6 +256,7 @@ def _detail_context(request, lead):
         "answers": _answers(lead, attributions),
         "attributions": attributions,
         "history": _history(lead),
+        "summary_groups": summary.groups(lead),
         "stages": Stage.choices,
         "chatwoot_url": _chatwoot_url(lead),
         "outbound": lead.outbound_messages.all()[:20],
