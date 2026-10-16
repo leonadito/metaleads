@@ -37,6 +37,9 @@ Sua tarefa, a partir do perfil do cliente:
    - Prompt da subetapa: por que ela existe e quando um lead deve estar nela, em 1 a 3 frases. Ele detalha o prompt
      mestre da etapa e nunca o contradiz.
    - As subetapas de uma etapa não se sobrepõem: um lead tem que caber em uma só.
+   - Perdido: uma subetapa para cada motivo de perda que o perfil dá ("Principais motivos de perda"), mais a de quem
+     parou de responder, quando os canais permitirem insistir. Não qualificado: a partir do que o perfil diz que
+     desqualifica um lead.
 3. Use só o que o perfil diz. Não invente preços, prazos, produtos, nomes ou regras que não estejam lá.
 4. Escreva em português do Brasil, no tom de uma orientação interna para a equipe e para a IA de atendimento.
 
