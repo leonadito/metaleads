@@ -33,7 +33,7 @@ from django.utils import timezone
 from django_tasks import task
 from django_tasks_db.models import DBTaskResult
 
-from . import funnel, llm, summary
+from . import funnel, llm, sdr, summary
 from .models import CLOSED_STAGES, MAX_SUBSTAGES_PER_STAGE, EventType, Lead, LeadEvent, Stage, Substage, Tenant
 
 logger = logging.getLogger(__name__)
@@ -379,4 +379,6 @@ def route_lead(lead_id):
                                    "conversation_chars": len(conversation),
                                    "truncated": conversation.startswith("[mensagens mais antigas omitidas]")})
     summary.schedule(lead)
+    lead.refresh_from_db()
+    sdr.schedule(lead)  # the reply, from the lead's new position (not when it went to human review)
     return outcome

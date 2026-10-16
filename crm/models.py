@@ -48,6 +48,9 @@ class Tenant(models.Model):
     ai_funnel_built_at = models.DateTimeField("funil montado pela IA em", null=True, blank=True)
     ai_funnel_profile_version = models.PositiveIntegerField(null=True, blank=True)
     ai_last_error = models.TextField(blank=True)
+    # SDR agent (Phase 7, decision of 2026-10-16): replies start as drafts a
+    # person approves; this switch lets the AI send on its own.
+    ai_reply_auto = models.BooleanField("IA envia respostas sem aprovação", default=False)
     # Outgoing messages (Phase 6, crm/messaging.py).
     chatwoot_inboxes = models.JSONField("inboxes do Chatwoot", default=list, blank=True)  # read from the core
     resend_window_days = models.PositiveIntegerField(
@@ -353,6 +356,7 @@ class EventType(models.TextChoices):
     UNSUBSCRIBED = "unsubscribed", "Descadastro"
     REVIEW = "review", "Revisão humana"
     AI_DECISION = "ai_decision", "Decisão da IA"
+    AI_REPLY = "ai_reply", "Resposta da IA"
     RELEASED = "released", "Liberado da revisão"
 
 
@@ -735,3 +739,35 @@ class KnowledgeChunk(models.Model):
     class Meta:
         ordering = ["document", "order"]
         indexes = [models.Index(fields=["tenant"])]
+
+
+class ReplyDraft(models.Model):
+    """A reply the SDR agent wrote (crm.sdr). The text is kept only while it
+    waits for a person (conversations live in Chatwoot, decision of
+    2026-10-12): it is cleared when sent, discarded or expired."""
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Aguardando aprovação"
+        SENT = "sent", "Enviada"
+        DISCARDED = "discarded", "Descartada"
+        EXPIRED = "expired", "Vencida"
+        HANDOFF = "handoff", "Passada para a equipe"
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="reply_drafts")
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="reply_drafts")
+    conversation_id = models.PositiveIntegerField()
+    answers_message_id = models.PositiveBigIntegerField("mensagem do lead respondida")
+    text = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
+    handoff_reason = models.CharField(max_length=30, blank=True)
+    critical = models.BooleanField(default=False)
+    sources = models.JSONField(default=list, blank=True)
+    self_review = models.JSONField(default=list, blank=True)
+    sent_by = models.CharField(max_length=200, blank=True)
+    edited = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]

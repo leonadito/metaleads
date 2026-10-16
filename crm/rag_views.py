@@ -1,12 +1,13 @@
-"""CRM screen "Documentos da IA" (Phase 7): the client's master RAG."""
+"""CRM screens of the AI (Phase 7): "Documentos da IA" (the client's master RAG)
+and the approval of the SDR agent's drafts."""
 from urllib.parse import urlencode
 
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
-from . import llm, rag
-from .models import KnowledgeDocument
+from . import chatwoot_actions, llm, rag, sdr
+from .models import KnowledgeDocument, LeadEvent, ReplyDraft
 from .views import actor, tenant_required
 
 
@@ -102,3 +103,29 @@ def document_delete(request, doc_uuid):
     title = doc.title
     doc.delete()
     return _back(ok=f"“{title}” apagado.")
+
+
+@tenant_required
+def draft_page(request, draft_uuid):
+    """A draft of the SDR agent: send it (maybe edited) or discard it."""
+    draft = ReplyDraft.objects.select_related("lead__contact").filter(tenant=request.tenant, uuid=draft_uuid).first()
+    if draft is None:
+        raise Http404
+    error = ""
+    if request.method == "POST" and draft.status == ReplyDraft.Status.DRAFT:
+        if request.POST.get("action") == "discard":
+            sdr.close(draft, ReplyDraft.Status.DISCARDED, actor(request))
+            return redirect(f"/crm/leads/{draft.lead.uuid}/")
+        text = request.POST.get("text", "").strip()
+        if not text:
+            error = "A mensagem está vazia."
+        else:
+            try:
+                sdr.approve(draft, text, actor(request))
+                return redirect(f"/crm/leads/{draft.lead.uuid}/")
+            except (ValueError, chatwoot_actions.ChatwootUnavailable) as exc:
+                error = f"Não foi enviada: {exc}"
+    newer = LeadEvent.objects.filter(lead=draft.lead, type="message", data__direction="incoming",
+                                     data__message_id__gt=draft.answers_message_id).exists()
+    return render(request, "crm/draft.html", {"draft": draft, "lead": draft.lead, "error": error, "newer": newer,
+                                              "handoff_label": sdr.HANDOFF_REASONS.get(draft.handoff_reason, draft.handoff_reason)})

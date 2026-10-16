@@ -190,6 +190,7 @@ EVENT_COLORS = {
     EventType.CREATED: "bg-sky-500", EventType.REENTRY: "bg-sky-300", EventType.STAGE_CHANGED: "bg-brand",
     EventType.MESSAGE: "bg-emerald-400", EventType.NOTE: "bg-amber-400",
     EventType.REVIEW: "bg-accent", EventType.RELEASED: "bg-accent", EventType.AI_DECISION: "bg-indigo-400",
+    EventType.AI_REPLY: "bg-indigo-600",
     EventType.MESSAGE_SENT: "bg-emerald-600", EventType.MESSAGE_SKIPPED: "bg-gray-400",
     EventType.UNSUBSCRIBED: "bg-accent",
     EventType.EMAIL_OPENED: "bg-gray-400", EventType.EMAIL_CLICKED: "bg-gray-400",
@@ -217,6 +218,10 @@ def _history(lead):
             dec = d.get("decision") or {}
             conf = dec.get("confianca")
             text = f"IA: {d.get('outcome', '')}" + (f" (confiança {float(conf):.2f})" if isinstance(conf, (int, float)) else "")
+            if d.get("self_review"):
+                text += " · autocrítica " + ("aprovou" if d["self_review"][-1].get("aprovada") else "reprovou")
+        elif e.type == EventType.AI_REPLY:
+            text = f"Resposta da IA: {d.get('outcome', '')}"
             if d.get("self_review"):
                 text += " · autocrítica " + ("aprovou" if d["self_review"][-1].get("aprovada") else "reprovou")
         elif e.type == EventType.MESSAGE:
@@ -406,6 +411,9 @@ def ai_switch(request):
     tenant = request.tenant
     if action == "off":
         Tenant.objects.filter(pk=tenant.pk).update(ai_enabled_at=None)
+        return redirect("crm_funnel")
+    if action in ("auto_on", "auto_off"):
+        Tenant.objects.filter(pk=tenant.pk).update(ai_reply_auto=action == "auto_on")
         return redirect("crm_funnel")
     if not (tenant.profile or {}).get("ready_for_ai"):
         return _funnel_section(request, "Para ligar a IA, o perfil do cliente precisa estar completo.")

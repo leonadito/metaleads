@@ -42,6 +42,19 @@
     <form method="post" action="{% url 'crm_ai_switch' %}" onsubmit="return confirm('Desligar a IA deste cliente? O funil fica como está.')">{% csrf_token %}<input type="hidden" name="action" value="off">
       <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-accent">Desligar</button></form>
   </div>
+  <div class="mt-3 border-t border-gray-100 pt-3">
+    <p class="font-medium">Respostas aos leads</p>
+    {% if tenant.ai_reply_auto %}
+    <p class="text-gray-700">A IA <strong>envia sozinha</strong> nas conversas que estão com o bot. Numa conversa que uma pessoa abriu, ela deixa só a sugestão.</p>
+    <form method="post" action="{% url 'crm_ai_switch' %}" class="mt-2">{% csrf_token %}<input type="hidden" name="action" value="auto_off">
+      <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-brand">Voltar para aprovação</button></form>
+    {% else %}
+    <p class="text-gray-700">A IA escreve a resposta como nota privada na conversa do Chatwoot, com um link para aprovar, editar ou descartar. Nada sai sem uma pessoa aprovar.</p>
+    <form method="post" action="{% url 'crm_ai_switch' %}" class="mt-2" onsubmit="return confirm('A IA vai responder os leads sem aprovação nas conversas com o bot. Confirmar?')">{% csrf_token %}<input type="hidden" name="action" value="auto_on">
+      <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-brand">Deixar a IA enviar sozinha</button></form>
+    {% endif %}
+    <p class="mt-1 text-xs text-gray-500">Ela passa a conversa para a equipe quando o lead pede uma pessoa, pede algo que não está no perfil nem nos <a href="{% url 'crm_documents' %}" class="text-brand hover:underline">documentos</a>, está pronto para fechar, ou quando ela não tem segurança.</p>
+  </div>
   {% elif profile.ready_for_ai %}
   <p>Desligada. Ao ligar, a IA lê o perfil do cliente, escreve o prompt mestre de cada etapa e cria as subetapas (até 5 por etapa). Prompts bloqueados e subetapas que já existem são respeitados.</p>
   <form method="post" action="{% url 'crm_ai_switch' %}" class="mt-2">{% csrf_token %}<input type="hidden" name="action" value="on">

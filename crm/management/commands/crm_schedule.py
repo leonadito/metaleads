@@ -4,6 +4,7 @@ from crm.chatwoot_actions import ensure_waiting_check
 from crm.messaging import ensure_queue_loop
 from crm.meta import ensure_hourly_poll
 from crm.orphans import ensure_nightly_check
+from crm.sdr import ensure_expiry
 from crm.tasks import ensure_daily_sync
 
 
@@ -16,3 +17,4 @@ class Command(BaseCommand):
         self.stdout.write("checagem noturna de órfãos " + ("agendada" if ensure_nightly_check() else "já estava na fila"))
         self.stdout.write("avisos de espera no Chatwoot " + ("agendados" if ensure_waiting_check() else "já estavam na fila"))
         self.stdout.write("fila de mensagens " + ("agendada" if ensure_queue_loop() else "já estava na fila"))
+        self.stdout.write("limpeza dos rascunhos da IA " + ("agendada" if ensure_expiry() else "já estava na fila"))

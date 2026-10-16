@@ -26,6 +26,7 @@ urlpatterns = [
     path("crm/funil/ia/", views.ai_switch, name="crm_ai_switch"),
     path("crm/mensagens/", messages_views.messages_page, name="crm_messages"),
     path("crm/ia/documentos/", rag_views.documents_page, name="crm_documents"),
+    path("crm/ia/rascunho/<uuid:draft_uuid>/", rag_views.draft_page, name="crm_draft"),
     path("crm/ia/documentos/novo/", rag_views.document_add, name="crm_document_add"),
     path("crm/ia/documentos/<uuid:doc_uuid>/reindexar/", rag_views.document_reindex, name="crm_document_reindex"),
     path("crm/ia/documentos/<uuid:doc_uuid>/uso/", rag_views.document_toggle, name="crm_document_toggle"),
