@@ -53,6 +53,12 @@
     <form method="post" action="{% url 'crm_ai_switch' %}" class="mt-2" onsubmit="return confirm('A IA vai responder os leads sem aprovação nas conversas com o bot. Confirmar?')">{% csrf_token %}<input type="hidden" name="action" value="auto_on">
       <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-brand">Deixar a IA enviar sozinha</button></form>
     {% endif %}
+    <form method="post" action="{% url 'crm_ai_switch' %}" class="mt-3 space-y-2">{% csrf_token %}<input type="hidden" name="action" value="wait_message">
+      <label class="flex items-center gap-2"><input type="checkbox" name="enabled" {% if tenant.wait_message_enabled %}checked{% endif %}> Mensagem de espera</label>
+      <p class="text-xs text-gray-500">Quando a conversa vai para a revisão humana, o lead recebe esta mensagem uma única vez. Em branco, vale o texto padrão.</p>
+      <textarea name="text" rows="2" placeholder="{{ default_wait_message }}" aria-label="Texto da mensagem de espera">{{ tenant.wait_message }}</textarea>
+      <button class="rounded-md border border-gray-300 px-3 py-1.5 hover:border-brand">Salvar mensagem de espera</button>
+    </form>
     <p class="mt-1 text-xs text-gray-500">Ela passa a conversa para a equipe quando o lead pede uma pessoa, pede algo que não está no perfil nem nos <a href="{% url 'crm_documents' %}" class="text-brand hover:underline">documentos</a>, está pronto para fechar, ou quando ela não tem segurança.</p>
   </div>
   {% elif profile.ready_for_ai %}

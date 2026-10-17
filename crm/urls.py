@@ -1,11 +1,14 @@
 from django.urls import path
 
-from . import api, chatwoot, core_sync, google_ads, messages_views, meta, rag_views, tracking, views
+from . import api, chatwoot, core_sync, dashboard_app, google_ads, messages_views, meta, rag_views, tracking, views
 
 urlpatterns = [
     path("api/v1/leads", api.create_lead, name="api_create_lead"),
     path("webhooks/core/", core_sync.core_webhook, name="core_webhook"),
     path("webhooks/chatwoot/", chatwoot.chatwoot_webhook, name="chatwoot_webhook"),
+    path("chatwoot/app/<uuid:tenant_uuid>/<str:code>/", dashboard_app.app, name="chatwoot_app"),
+    path("chatwoot/app/<uuid:tenant_uuid>/<str:code>/conversa/<int:conversation_id>/", dashboard_app.card,
+         name="chatwoot_app_card"),
     path("webhooks/meta/", meta.meta_webhook, name="meta_webhook"),
     path("webhooks/google-ads/", google_ads.google_ads_webhook, name="google_ads_webhook"),
     path("t/<str:token>/", tracking.click, name="tracked_click"),

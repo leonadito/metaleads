@@ -277,6 +277,30 @@ def plan_substage(lead_id, substage_id, forced_by=""):
     return f"{msg.channel}:{msg.status}"
 
 
+DEFAULT_WAIT_MESSAGE = "Obrigado pela mensagem! Um atendente vai continuar o seu atendimento em breve."
+
+
+def wait_message_text(tenant):
+    return (tenant.wait_message or "").strip() or DEFAULT_WAIT_MESSAGE
+
+
+@task
+def plan_wait(lead_id):
+    """Once per human review, to a lead waiting for an answer in a
+    conversation (decision of 2026-10-12). Channel rules apply (no free text
+    outside WhatsApp's 24-hour window)."""
+    lead = Lead.objects.select_related("tenant", "contact").filter(pk=lead_id).first()
+    if lead is None or not lead.frozen_at or not lead.conversation_id or not lead.waiting_since:
+        return "nada a enviar"
+    tenant = lead.tenant
+    if not tenant.ai_enabled_at or not tenant.wait_message_enabled or not tenant.chatwoot_account_id:
+        return "mensagem de espera desligada"
+    msg = _plan(lead, OutboundMessage.WAIT, SOURCE_CHANNEL.get(lead.source, Channel.EMAIL),
+                f"wait:{int(lead.frozen_at.timestamp())}", conversation_id=lead.conversation_id,
+                body=render(wait_message_text(tenant), variables(lead)), priority=PRIORITY_ANSWER)
+    return f"{msg.channel}:{msg.status}"
+
+
 def resend(message, actor, reason):
     """A person sends the same message again on purpose (reason recorded)."""
     lead = message.lead

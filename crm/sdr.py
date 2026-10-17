@@ -118,7 +118,10 @@ REVIEW_SCHEMA = {
 # ── Scheduling ───────────────────────────────────────────────────────────────
 
 def can_reply(lead):
-    return bool(lead.tenant.ai_enabled_at and lead.is_open and not lead.frozen_at and lead.conversation_id)
+    from .handoff import with_people
+
+    return bool(lead.tenant.ai_enabled_at and lead.is_open and not lead.frozen_at and lead.conversation_id
+                and not with_people(lead))
 
 
 def schedule(lead):
@@ -160,7 +163,7 @@ def rag_query(messages):
 
 
 def build_request(lead, messages, passages):
-    from .routing import conversation_text
+    from .routing import conversation_text, email_events_text
 
     answers = "\n".join(f"- {k}: {v}" for k, v in (lead.form_answers or {}).items())
     return {
@@ -173,7 +176,8 @@ def build_request(lead, messages, passages):
                 f"{now_text()}\n{position_block(lead)}\n\n"
                 f"Lead: {lead.contact.name or '(sem nome)'} · canal: {lead.get_source_display()}\n"
                 f"<resumo>\n{summary.as_text(lead)}\n</resumo>\n"
-                f"<formulario>\n{answers or '(sem respostas de formulário)'}\n</formulario>\n\n"
+                f"<formulario>\n{answers or '(sem respostas de formulário)'}\n</formulario>\n"
+                f"E-mails do CRM: {email_events_text(lead)}\n\n"
                 f"<documentos>\n{rag.context_text(passages)}\n</documentos>")},
             {"type": "text", "text": f"<conversa>\n{conversation_text(messages)}\n</conversa>\n\n"
                                      "Escreva agora a resposta à última mensagem do lead."},

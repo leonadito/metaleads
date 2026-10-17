@@ -1,0 +1,40 @@
+{% load static %}<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CRM</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+</head>
+<body class="bg-white p-3 text-sm text-gray-800">
+  <div id="crm-card"><p class="text-gray-500">Abra uma conversa para ver o lead no CRM.</p></div>
+  {{ chatwoot_origin|json_script:"chatwoot-origin" }}
+  {{ card_url|json_script:"card-url" }}
+  <script>
+    (function () {
+      var origin = JSON.parse(document.getElementById("chatwoot-origin").textContent);
+      var cardUrl = JSON.parse(document.getElementById("card-url").textContent);
+      var shown = null;
+      function show(conversationId) {
+        if (!conversationId || conversationId === shown) return;
+        shown = conversationId;
+        fetch(cardUrl + encodeURIComponent(conversationId) + "/", {credentials: "omit"})
+          .then(function (r) { return r.ok ? r.text() : "<p>Não consegui abrir o lead.</p>"; })
+          .then(function (html) { document.getElementById("crm-card").innerHTML = html; });
+      }
+      window.addEventListener("message", function (event) {
+        if (!origin || event.origin !== origin) return;  // only Chatwoot
+        var data = event.data;
+        try { if (typeof data === "string") data = JSON.parse(data); } catch (e) { return; }
+        if (!data || data.event !== "appContext") return;
+        var conversation = (data.data || {}).conversation || {};
+        show(conversation.id);
+      });
+      if (window.parent !== window && origin) {
+        window.parent.postMessage("chatwoot-dashboard-app:fetch-info", origin);
+      }
+    })();
+  </script>
+</body>
+</html>

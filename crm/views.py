@@ -21,6 +21,7 @@ from django.views.decorators.http import require_POST
 
 from . import chatwoot_actions, funnel, summary
 from .ingest import IngestError, ingest
+from .messaging import DEFAULT_WAIT_MESSAGE
 from .models import CLOSED_STAGES, EventType, Lead, LeadAttribution, LeadEvent, Source, Stage, Substage, Tenant
 
 COLUMN_LIMIT = 100
@@ -360,7 +361,7 @@ def _funnel_context(tenant, error=""):
     masters = funnel.stage_prompts(tenant)
     stages = [(value, label, items, active, room, masters[value]) for value, label, items, active, room in stages]
     return {"stages": stages, "error": error, "tenant": tenant, "max_substages": MAX_SUBSTAGES_PER_STAGE,
-            "profile": profile,
+            "profile": profile, "default_wait_message": DEFAULT_WAIT_MESSAGE,
             "profile_url": f"{settings.CORE_API_URL.rstrip('/')}/clientes/{tenant.slug}/perfil/" if settings.CORE_API_URL else ""}
 
 
@@ -414,6 +415,10 @@ def ai_switch(request):
         return redirect("crm_funnel")
     if action in ("auto_on", "auto_off"):
         Tenant.objects.filter(pk=tenant.pk).update(ai_reply_auto=action == "auto_on")
+        return redirect("crm_funnel")
+    if action == "wait_message":
+        Tenant.objects.filter(pk=tenant.pk).update(wait_message_enabled=request.POST.get("enabled") == "on",
+                                                   wait_message=request.POST.get("text", "").strip()[:1000])
         return redirect("crm_funnel")
     if not (tenant.profile or {}).get("ready_for_ai"):
         return _funnel_section(request, "Para ligar a IA, o perfil do cliente precisa estar completo.")

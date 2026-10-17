@@ -177,6 +177,9 @@ def sync_lead(lead_id, review=False, released=False):
             "Para decidir: mude o atributo Subetapa desta conversa, ou resolva a conversa.",
         ])))
         bot_api(tenant, "POST", f"conversations/{conversation}/toggle_status", {"status": "open"})
+        from .messaging import plan_wait
+
+        plan_wait.enqueue(lead.pk)
     elif released:
         change_labels(tenant, conversation, remove=[REVIEW_LABEL])
     return "ok"
@@ -231,7 +234,10 @@ def conversation_changed(tenant_id, payload):
     if payload.get("event") == "conversation_status_changed":
         if payload.get("status") in ("resolved", "pending") and lead.waiting_since:
             clear_waiting(lead)
-        # Resolved conversations are read by the LLM in Phase 7.
+        if payload.get("status") == "resolved":
+            from . import handoff
+
+            return "resolvida: a IA lê a conversa" if handoff.on_resolved(lead) else "resolvida"
         return f"status {payload.get('status')}"
 
     change = next((c[ATTRIBUTE_CHANGE] for c in payload.get("changed_attributes") or [] if ATTRIBUTE_CHANGE in c), None)
@@ -264,8 +270,12 @@ def message_seen(lead, direction, sender_type, at=None):
     if direction == "incoming":
         if lead.waiting_since is None:
             Lead.objects.filter(pk=lead.pk, waiting_since__isnull=True).update(waiting_since=at)
-    elif direction == "outgoing" and sender_type == "user" and lead.waiting_since:
-        clear_waiting(lead)
+    elif direction == "outgoing" and sender_type == "user":
+        from . import handoff
+
+        handoff.on_agent_reply(lead)
+        if lead.waiting_since:
+            clear_waiting(lead)
 
 
 def clear_waiting(lead):
@@ -318,8 +328,15 @@ def alert_waiting(lead, now=None):
 
 @task
 def waiting_check():
-    """Every 5 minutes. Re-enqueues itself."""
+    """Every 5 minutes. Re-enqueues itself. Also gives back to the AI the
+    conversations reopened after a resolution that no one answered."""
+    from . import handoff
+
     try:
+        try:
+            handoff.return_expired()
+        except Exception:  # never stop the waiting alerts
+            logger.exception("Volta das conversas para a IA falhou")
         for lead in due_waiting():
             try:
                 alert_waiting(lead)

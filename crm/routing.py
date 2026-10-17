@@ -159,16 +159,32 @@ def conversation_text(messages, with_ids=False):
     return "\n".join(reversed(out))
 
 
+def email_events_text(lead, limit=5):
+    """The lead's latest e-mail events (opened, clicked), for the AI."""
+    events = LeadEvent.objects.filter(lead=lead, type__in=[EventType.EMAIL_OPENED, EventType.EMAIL_CLICKED]) \
+        .order_by("-created_at")[:limit]
+    lines = []
+    for e in events:
+        what = "abriu um e-mail" if e.type == EventType.EMAIL_OPENED else f"clicou num link do e-mail ({e.data.get('url', '')})"
+        lines.append(f"- {timezone.localtime(e.created_at):%d/%m/%Y %H:%M}: {what}")
+    return "\n".join(lines) or "(nenhum e-mail aberto ou clicado)"
+
+
 def lead_text(lead):
     where = lead.get_stage_display() + (f" > {lead.substage.name}" if lead.substage else "")
     answers = "\n".join(f"- {k}: {v}" for k, v in (lead.form_answers or {}).items())
     return (f"Lead: {lead.contact.name or '(sem nome)'} · canal de entrada: {lead.get_source_display()} · "
             f"posição atual: {where} · entrou em {timezone.localtime(lead.created_at):%d/%m/%Y}\n"
             f"Resumo atual: {summary.as_text(lead)}\n"
-            f"<formulario>\n{answers or '(sem respostas de formulário)'}\n</formulario>")
+            f"<formulario>\n{answers or '(sem respostas de formulário)'}\n</formulario>\n"
+            f"E-mails do CRM: {email_events_text(lead)}")
 
 
-def build_request(lead, messages):
+RESOLVED_NOTE = ("A equipe acabou de resolver (encerrar) esta conversa. Decida a posição final do lead pela conversa "
+                 "inteira, inclusive o que a equipe respondeu e combinou com ele.")
+
+
+def build_request(lead, messages, resolved=False):
     return {
         "system": SYSTEM,
         "max_tokens": 1500,
@@ -177,7 +193,8 @@ def build_request(lead, messages):
             {"role": "user", "content": [
                 {"type": "text", "text": f"Funil do cliente {lead.tenant.name}:\n\n{funnel_text(lead.tenant)}"},
                 {"type": "text", "text": lead_text(lead)},
-                {"type": "text", "text": f"<conversa>\n{conversation_text(messages)}\n</conversa>\n\nDecida agora."},
+                {"type": "text", "text": f"<conversa>\n{conversation_text(messages)}\n</conversa>\n\n"
+                                         + (f"{RESOLVED_NOTE}\n\n" if resolved else "") + "Decida agora."},
             ]},
         ],
         "output_config": {"format": {"type": "json_schema", "schema": SCHEMA}},
@@ -255,12 +272,12 @@ def review_request(lead, decision, messages):
     }
 
 
-def decide(lead, messages):
+def decide(lead, messages, resolved=False):
     """Asks the LLM, with the validation loop and, for critical decisions,
     the self-review. Returns a dict: decision, error ("" when the decision
     can be applied), attempts, reviewed (the self-review approved it),
     reviews, divergent facts, tokens and model."""
-    request = build_request(lead, messages)
+    request = build_request(lead, messages, resolved)
     out = {"decision": None, "error": "", "attempts": 0, "reviewed": False, "reviews": [], "divergent": [],
            "tokens": 0, "model": "", "rejected": False}
     for attempt in range(1, MAX_RETRIES + 2):
@@ -332,10 +349,16 @@ def apply(lead, decision, reviewed=False):
 
 
 @task
-def route_lead(lead_id):
+def route_lead(lead_id, resolved=False):
+    """resolved: a person just resolved the conversation (crm.handoff): the
+    lead leaves human review and the AI decides from the whole conversation,
+    without answering."""
     lead = Lead.objects.select_related("tenant", "contact", "substage").filter(pk=lead_id).first()
     if lead is None or not lead.tenant.ai_enabled_at or not lead.is_open or not lead.conversation_id:
         return "não roteado"
+    if resolved and lead.frozen_at:
+        funnel.release(lead, actor=ACTOR, reason="Conversa resolvida pela equipe; a IA decide a posição")
+        lead.refresh_from_db()
     if lead.frozen_at:
         summary.schedule(lead)
         return "em revisão: só o resumo"
@@ -344,7 +367,7 @@ def route_lead(lead_id):
         messages = fetch_messages(tenant, lead.conversation_id)
         if not any(m.get("direction") == "incoming" for m in messages):
             return "sem mensagem do lead"
-        result = decide(lead, messages)
+        result = decide(lead, messages, resolved)
     except llm.QuotaExhausted as exc:
         Tenant.objects.filter(pk=tenant.pk).update(ai_last_error=str(exc)[:1000])
         return "cota esgotada: lead no manual"
@@ -377,8 +400,10 @@ def route_lead(lead_id):
                                    "model": result["model"], "tokens": result["tokens"],
                                    "self_review": result["reviews"], "divergent_facts": len(result["divergent"]),
                                    "conversation_chars": len(conversation),
-                                   "truncated": conversation.startswith("[mensagens mais antigas omitidas]")})
+                                   "truncated": conversation.startswith("[mensagens mais antigas omitidas]"),
+                                   "resolved": resolved})
     summary.schedule(lead)
-    lead.refresh_from_db()
-    sdr.schedule(lead)  # the reply, from the lead's new position (not when it went to human review)
+    if not resolved:  # a resolved conversation is closed: no reply
+        lead.refresh_from_db()
+        sdr.schedule(lead)  # the reply, from the lead's new position (not when it went to human review)
     return outcome

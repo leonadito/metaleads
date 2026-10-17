@@ -192,6 +192,9 @@ CORE_WEBHOOK_SECRET = config('CORE_WEBHOOK_SECRET', default='')
 HOME_URL = config('HOME_URL', default='/dashboard/')
 # Chatwoot, for the "open conversation" link on the lead page.
 CHATWOOT_URL = config('CHATWOOT_URL', default='').rstrip('/')
+# The CRM tab inside Chatwoot (crm.dashboard_app): secret shared with the
+# core, which builds each account's tab URL with it. Empty = no tab.
+CHATWOOT_CRM_APP_SECRET = config('CHATWOOT_CRM_APP_SECRET', default='')
 
 # Nightly orphan check (crm/orphans.py): agipages' read-only integrity
 # endpoint, and who gets the alert (e-mail to ADMINS; empty = log only).

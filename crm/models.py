@@ -51,6 +51,10 @@ class Tenant(models.Model):
     # SDR agent (Phase 7, decision of 2026-10-16): replies start as drafts a
     # person approves; this switch lets the AI send on its own.
     ai_reply_auto = models.BooleanField("IA envia respostas sem aprovação", default=False)
+    # Waiting message: sent once to a lead whose conversation went to human
+    # review (decision of 2026-10-12); empty text = the system's default.
+    wait_message_enabled = models.BooleanField("mensagem de espera ligada", default=True)
+    wait_message = models.TextField("mensagem de espera", blank=True)
     # Outgoing messages (Phase 6, crm/messaging.py).
     chatwoot_inboxes = models.JSONField("inboxes do Chatwoot", default=list, blank=True)  # read from the core
     resend_window_days = models.PositiveIntegerField(
@@ -253,6 +257,10 @@ class Lead(models.Model):
     # Last message of the lead still without an agent's answer (Chatwoot).
     waiting_since = models.DateTimeField("esperando resposta desde", null=True, blank=True, db_index=True)
     waiting_alerted_at = models.DateTimeField(null=True, blank=True)
+    # After a person resolves the conversation (crm.handoff): when, and until
+    # when it stays with the people after the lead wrote within 1 hour.
+    resolved_at = models.DateTimeField("conversa resolvida em", null=True, blank=True)
+    human_window_until = models.DateTimeField("com a equipe até", null=True, blank=True, db_index=True)
     external_id = models.CharField("id na fonte", max_length=128, blank=True)
     form_answers = models.JSONField("respostas do formulário", default=dict, blank=True)
     landing_page_uuid = models.UUIDField(null=True, blank=True)
@@ -631,8 +639,9 @@ class OutboundMessage(models.Model):
 
     QUEUED, SENT, SKIPPED, FAILED = "queued", "sent", "skipped", "failed"
     STATUS_CHOICES = [(QUEUED, "Na fila"), (SENT, "Enviada"), (SKIPPED, "Não enviada"), (FAILED, "Falhou")]
-    INITIAL, SUBSTAGE, MANUAL = "initial", "substage", "manual"
-    KIND_CHOICES = [(INITIAL, "Mensagem inicial"), (SUBSTAGE, "Mensagem da subetapa"), (MANUAL, "Manual")]
+    INITIAL, SUBSTAGE, MANUAL, WAIT = "initial", "substage", "manual", "wait"
+    KIND_CHOICES = [(INITIAL, "Mensagem inicial"), (SUBSTAGE, "Mensagem da subetapa"), (MANUAL, "Manual"),
+                    (WAIT, "Mensagem de espera")]
 
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="+")

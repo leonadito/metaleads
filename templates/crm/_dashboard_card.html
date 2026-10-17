@@ -1,0 +1,37 @@
+{% if not lead %}
+<p class="text-gray-600">Esta conversa ainda não tem lead no CRM.</p>
+{% else %}
+<div class="space-y-3">
+  <div>
+    <p class="font-semibold text-gray-900">{{ lead.contact.name|default:"(sem nome)" }}</p>
+    <p class="text-gray-500">{{ lead.get_source_display }} · entrou em {{ lead.created_at|date:"d/m/Y" }}</p>
+    <p class="mt-1 inline-block rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-white">{{ lead.get_stage_display }}{% if lead.substage %} › {{ lead.substage.name }}{% endif %}</p>
+  </div>
+  {% if lead.frozen_at %}
+  <div class="rounded-md border border-accent bg-red-50 p-2">
+    <p class="font-medium text-accent-text">Em revisão humana desde {{ lead.frozen_at|date:"d/m H:i" }}</p>
+    {% if lead.review_reason %}<p class="mt-1 whitespace-pre-line">{{ lead.review_reason }}</p>{% endif %}
+    <p class="mt-1 text-xs text-gray-600">Para decidir, mude o atributo "Subetapa" desta conversa ou resolva a conversa.</p>
+  </div>
+  {% endif %}
+  {% if draft %}<p class="rounded-md bg-indigo-50 p-2 text-indigo-900">Há uma sugestão de resposta da IA nas notas privadas desta conversa.</p>{% endif %}
+  {% if lead.summary or groups %}
+  <div>
+    <p class="font-medium">Resumo da IA</p>
+    {% if lead.summary %}<p class="mt-1 whitespace-pre-line">{{ lead.summary }}</p>{% endif %}
+    {% for label, facts in groups %}
+    <p class="mt-2 text-xs font-medium text-gray-500">{{ label }}</p>
+    <ul class="list-disc pl-4">{% for f in facts %}<li>{{ f.texto }}</li>{% endfor %}</ul>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if history %}
+  <div>
+    <p class="font-medium">Histórico recente</p>
+    <ul class="mt-1 space-y-1 text-xs">
+      {% for item in history %}<li><span class="text-gray-500">{{ item.event.created_at|date:"d/m H:i" }}</span> {{ item.text }}{% if item.event.reason %} — {{ item.event.reason|truncatechars:160 }}{% endif %}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
